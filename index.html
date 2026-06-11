@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sovereign Strategy Deliverables Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- ============ HEADER ============ -->
+    <header class="header">
+      <div class="header-main">
+        <h1 id="app-title">Sovereign Strategy Deliverables Dashboard</h1>
+        <p id="app-subtitle" class="subtitle">Universal SEO / GEO / AEO content command center</p>
+        <div id="active-meta" class="active-meta" style="display:none;"></div>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-num" id="stat-total">0</span>
+          <span class="stat-label">Total</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="stat-buildfirst">0</span>
+          <span class="stat-label">Build First</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="stat-published">0</span>
+          <span class="stat-label">Published</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ MESSAGE BANNER ============ -->
+    <div id="message" class="message" role="status" aria-live="polite"></div>
+
+    <!-- ============ ACCURACY QA PROMPT ============ -->
+    <section class="panel qa-panel">
+      <span class="panel-label">Paste this research prompt</span>
+      <p class="qa-desc">
+        Run this on any finished packet to <strong>quadruple-check every claim, number, image, and
+        link</strong> before it ships — writeups, images, everything. Copy it, paste it to Claude
+        with the packet, and get a full accuracy status report back.
+      </p>
+      <div class="qa-actions">
+        <button id="btn-copy-qa" class="btn btn-primary">Copy Accuracy QA Prompt</button>
+      </div>
+      <details class="qa-details">
+        <summary>Preview prompt</summary>
+        <pre id="qa-preview" class="qa-preview"></pre>
+      </details>
+    </section>
+
+    <!-- ============ IMPORT PANEL ============ -->
+    <section class="panel import-panel">
+      <label class="panel-label" for="import-box">Paste Claude Deliverables Output</label>
+      <textarea id="import-box" class="import-box"
+        placeholder="Paste a BEGIN_SOVEREIGN_DELIVERABLES_V1 packet, a JSON array, or raw JSON here…"></textarea>
+      <div class="import-buttons">
+        <button id="btn-import" class="btn btn-primary">Import</button>
+        <button id="btn-sample" class="btn">Load Sample</button>
+        <button id="btn-clear" class="btn">Clear Dashboard</button>
+        <button id="btn-export-json" class="btn">Export JSON</button>
+        <button id="btn-export-csv" class="btn">Export CSV</button>
+        <button id="btn-copy-prompt" class="btn btn-ghost">Copy Claude Data Packet Prompt</button>
+      </div>
+    </section>
+
+    <!-- ============ FILTERS ============ -->
+    <section class="panel filters">
+      <input type="search" id="filter-search" class="filter-search" placeholder="Search deliverables…" />
+      <select id="filter-platform" class="filter-select"><option value="">All platforms</option></select>
+      <select id="filter-priority" class="filter-select"><option value="">All priorities</option></select>
+      <select id="filter-status" class="filter-select"><option value="">All statuses</option></select>
+    </section>
+
+    <!-- ============ EMPTY STATE ============ -->
+    <div id="empty-state" class="empty-state" style="display:none;">
+      <p class="empty-title">Paste a Claude deliverables packet to begin.</p>
+      <p class="empty-sub">Or click <strong>Load Sample</strong> to see the dashboard in action.</p>
+      <pre class="empty-example">BEGIN_SOVEREIGN_DELIVERABLES_V1
+{
+  "meta": {
+    "client": "LibertyCES",
+    "project": "Your project name",
+    "topic": "Short topic summary"
+  },
+  "deliverables": [
+    {
+      "platform": "Webpage",
+      "deliverable_type": "Authority Page",
+      "priority": "Build First",
+      "status": "Idea",
+      "deliverable": "Page title here",
+      "angle": "The core strategic angle.",
+      "seo_focus": ["keyword one", "keyword two"],
+      "geo_focus": ["A natural-language search question?"],
+      "aeo_focus": ["A direct answer-engine question?"],
+      "context_blueprint": "2-4 sentences describing what to build.",
+      "notes": "Optional notes."
+    }
+  ]
+}
+END_SOVEREIGN_DELIVERABLES_V1</pre>
+    </div>
+
+    <!-- ============ NO RESULTS ============ -->
+    <div id="no-results" class="empty-state" style="display:none;">
+      <p class="empty-title">No deliverables match your filters.</p>
+      <p class="empty-sub">Try clearing the search box or resetting the dropdowns.</p>
+    </div>
+
+    <!-- ============ PLATFORM SECTIONS ============ -->
+    <main id="sections" class="sections"></main>
+
+    <footer class="footer">
+      <span>Sovereign Strategy Deliverables Dashboard — static, local, no backend.</span>
+    </footer>
+
+  </div>
+
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
