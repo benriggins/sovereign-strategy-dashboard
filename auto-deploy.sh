@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Auto-deploy the Sovereign Strategy dashboard to Netlify whenever its source
-# files change. Wired as a global Claude Code Stop hook. Cheap no-op when the
-# files are unchanged since the last deploy (guarded by a content hash).
+# Auto-deploy the Sovereign Strategy dashboard to GitHub Pages whenever its
+# source files change. Wired as a global Claude Code Stop hook.
+# GitHub Pages serves from the main branch root — no build step needed.
 
 set -uo pipefail
 
 DIR="$HOME/sovereign-strategy-dashboard"
-SITE="7e7952f1-4913-493b-9196-ee472666c6eb"
-MARKER="$DIR/.netlify/.last-deploy-hash"
+MARKER="$DIR/.last-deploy-hash"
 LOG="/tmp/dashboard-auto-deploy.log"
 FILES=(index.html styles.css app.js sample-data.js)
 
@@ -27,18 +26,19 @@ PREV=$(cat "$MARKER" 2>/dev/null || true)
 # Unchanged since last deploy -> nothing to do (fast path).
 [ "$HASH" = "$PREV" ] && exit 0
 
-# Stage a clean publish dir (only the 4 files — no zip/readme/.netlify).
-TMP=$(mktemp -d)
-cp "${FILES[@]}" "$TMP"/
+# Stage, commit, and push.
+if git add index.html styles.css app.js sample-data.js \
+  && git diff --cached --quiet && exit 0 \
+  ; then
+  true
+fi
 
-if npx -y netlify-cli deploy --prod --dir "$TMP" --site "$SITE" >"$LOG" 2>&1; then
-  mkdir -p "$DIR/.netlify"
+if git add index.html styles.css app.js sample-data.js \
+  && git commit -m "Dashboard update [auto-deploy]" \
+  && git push origin main >"$LOG" 2>&1; then
   printf '%s' "$HASH" > "$MARKER"
-  URL=$(grep -Eo 'https://[a-z0-9.-]+netlify\.app' "$LOG" | head -1)
-  rm -rf "$TMP"
-  printf '{"systemMessage":"✅ Dashboard changes auto-deployed to Netlify (%s)"}\n' "${URL:-https://cosmic-kataifi-286c95.netlify.app}"
+  printf '{"systemMessage":"✅ Dashboard pushed to GitHub Pages (benriggins.github.io/sovereign-strategy-dashboard)"}\n'
 else
-  rm -rf "$TMP"
   printf '{"systemMessage":"⚠️ Dashboard auto-deploy FAILED — see %s"}\n' "$LOG"
 fi
 exit 0

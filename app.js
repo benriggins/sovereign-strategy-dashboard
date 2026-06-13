@@ -11,6 +11,7 @@ const CONFIG = {
   appSubtitle: "Universal SEO / GEO / AEO content command center",
   defaultClient: "LibertyCES",
   storageKey: "sovereign_strategy_deliverables_v1",
+  imageStorageKey: "sovereign_strategy_images_v1",
   platforms: [
     "Webpage",
     "Product Page",
@@ -149,6 +150,20 @@ Eliminate ALL errors — no matter what. If something cannot be verified, label 
 UNVERIFIED and flag it loudly; never let it pass silently. Do not approve this
 packet until it is 100% error-free.`;
 
+/* Platform → short label prefix for deliverable numbering. */
+const PLATFORM_ABBREV = {
+  "Webpage":                      "Webpage",
+  "Product Page":                 "Product Pg",
+  "Blog":                         "Blog",
+  "YouTube / NotebookLM Video":   "YouTube",
+  "Instagram Video":              "IG Video",
+  "Instagram Carousel":           "IG Carousel",
+  "LinkedIn Carousel":            "LI Carousel",
+  "LinkedIn James Post":          "LI James",
+  "LinkedIn LibertyCES Post":     "LI LibertyCES",
+  "LinkedIn Newsletter":          "LI Newsletter"
+};
+
 /* =========================================================================
  * State
  * ========================================================================= */
@@ -158,6 +173,43 @@ const OTHER_SECTION = "Other";
 let state = {
   meta: {},          // { client, project, topic, created_by, notes }
   deliverables: []   // array of normalized deliverable objects
+};
+
+// Deliverable short-label map: id → "LI James #2" — rebuilt on every render.
+let deliverableLabelMap = new Map();
+
+function buildDeliverableLabelMap() {
+  deliverableLabelMap = new Map();
+  const order = [...CONFIG.platforms, OTHER_SECTION];
+  const groups = {};
+  state.deliverables.forEach(d => {
+    const key = CONFIG.platforms.includes(d.platform) ? d.platform : OTHER_SECTION;
+    (groups[key] = groups[key] || []).push(d);
+  });
+  order.forEach(platform => {
+    if (!groups[platform]) return;
+    const abbrev = PLATFORM_ABBREV[platform] || platform;
+    groups[platform].forEach((d, i) => {
+      deliverableLabelMap.set(d.id, `${abbrev} #${i + 1}`);
+    });
+  });
+}
+
+function getDeliverableLabel(d) {
+  return deliverableLabelMap.get(d.id) || "";
+}
+
+// Look up a short label by deliverable title (for Image Library "Used in").
+function getLabelByTitle(title) {
+  const d = state.deliverables.find(x => x.deliverable === title);
+  return d ? getDeliverableLabel(d) : title;
+}
+
+// Image state — persisted separately so clearing deliverables keeps image blueprints
+let imageState = {
+  meta: {},        // { campaign, blocker, step, ... }
+  assignments: {}, // deliverable title → { images: string[], image_logic: string }
+  blueprints: {}   // "IMG-01" → { id, caption, type, status, prompt }
 };
 
 /* =========================================================================
@@ -335,10 +387,403 @@ function normalizeDeliverable(d) {
     geo_focus: toArray(d.geo_focus),
     aeo_focus: toArray(d.aeo_focus),
     context_blueprint: blueprint,
-    notes: (d.notes || "").toString().trim()
+    notes: (d.notes || "").toString().trim(),
+    url: (d.url || "").toString().trim()
   };
 
   return { ok: true, value };
+}
+
+/* =========================================================================
+ * Image Blueprints — parsing, import, persistence
+ * ========================================================================= */
+
+/* Parse an image packet. Accepts:
+ *   - BEGIN_SOVEREIGN_IMAGE_BLUEPRINTS_V1 wrapper
+ *   - BEGIN_SOVEREIGN_DELIVERABLES_V1 wrapper (when deliverables have images fields)
+ *   - Raw JSON
+ * Returns { meta, assignments, blueprints }
+ * assignments keyed by deliverable title → { images: string[], image_logic: string }
+ * blueprints keyed by IMG ID → { id, caption, type, status, prompt }
+ */
+function parseImagePacket(raw) {
+  if (!raw || !raw.trim()) {
+    throw new Error("Nothing to import. Paste an image blueprints packet first.");
+  }
+
+  let text = raw.trim();
+  const wrappers = [
+    [/BEGIN_SOVEREIGN_IMAGE_BLUEPRINTS_V1/i, /END_SOVEREIGN_IMAGE_BLUEPRINTS_V1/i],
+    [/BEGIN_SOVEREIGN_DELIVERABLES_V1/i, /END_SOVEREIGN_DELIVERABLES_V1/i],
+    [/BEGIN_LIBERTYCES_DELIVERABLES_V1/i, /END_LIBERTYCES_DELIVERABLES_V1/i]
+  ];
+  for (const [begin, end] of wrappers) {
+    const b = text.search(begin);
+    if (b !== -1) {
+      const afterBegin = text.slice(b).replace(begin, "");
+      const e = afterBegin.search(end);
+      text = (e !== -1 ? afterBegin.slice(0, e) : afterBegin).trim();
+      break;
+    }
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (_) {
+    const sliced = sliceOutermostJSON(text);
+    if (sliced) {
+      try { parsed = JSON.parse(sliced); }
+      catch (_2) { throw new Error("That doesn't look like valid JSON. Check for missing commas or quotes."); }
+    } else {
+      throw new Error("That doesn't look like valid JSON. Check for missing commas or quotes.");
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Could not parse the image packet.");
+  }
+
+  const meta = (parsed.meta && typeof parsed.meta === "object") ? parsed.meta : {};
+  const assignments = {};
+  const blueprints = {};
+
+  // Parse deliverables array → image assignments (expects "images" + "deliverable" fields)
+  if (Array.isArray(parsed.deliverables)) {
+    parsed.deliverables.forEach(d => {
+      if (!d || !d.deliverable || !d.images) return;
+      const rawImgs = typeof d.images === "string"
+        ? d.images.split(/[\s,]+/)
+        : (Array.isArray(d.images) ? d.images : []);
+      const imgs = rawImgs.map(s => s.trim()).filter(s => /^IMG-\d+$/i.test(s));
+      if (imgs.length) {
+        assignments[d.deliverable.trim()] = {
+          images: imgs,
+          image_logic: (d.image_logic || "").trim()
+        };
+      }
+    });
+  }
+
+  // Parse blueprints array → prompt-style format
+  if (Array.isArray(parsed.blueprints)) {
+    parsed.blueprints.forEach(bp => {
+      if (!bp || !bp.id) return;
+      blueprints[bp.id.trim()] = {
+        id: bp.id.trim(),
+        caption: (bp.caption || "").trim(),
+        type: (bp.type || "").trim(),
+        status: (bp.status || "").trim(),
+        prompt: (bp.prompt || "").trim(),
+        shot_type: "", subject: "", setting: "", mood: "", vendor_ref: "", alt_text: ""
+      };
+    });
+  }
+
+  // Parse meta.image_library → structured blueprint dict (IMG-01: { shot_type, subject, ... })
+  const imgLib = parsed.meta && parsed.meta.image_library;
+  if (imgLib && typeof imgLib === "object" && !Array.isArray(imgLib)) {
+    Object.entries(imgLib).forEach(([id, d]) => {
+      if (!id || typeof d !== "object") return;
+      const vendorRefStr = (d.vendor_ref || "").trim();
+      const isVendorRef = vendorRefStr.toLowerCase().startsWith("yes");
+      blueprints[id] = {
+        id,
+        caption:    (d.alt_text   || "").trim(),
+        type:       (d.shot_type  || "").trim(),
+        status:     isVendorRef ? "needs_reference" : "ready",
+        prompt:     (d.prompt     || "").trim(),
+        shot_type:  (d.shot_type  || "").trim(),
+        subject:    (d.subject    || "").trim(),
+        setting:    (d.setting    || "").trim(),
+        mood:       (d.mood       || "").trim(),
+        vendor_ref: (d.vendor_ref || "").trim(),
+        alt_text:   (d.alt_text   || "").trim()
+      };
+    });
+  }
+
+  if (!Object.keys(assignments).length && !Object.keys(blueprints).length) {
+    throw new Error(
+      "No image assignments or blueprints found. " +
+      "Paste a packet with a \"deliverables\" array (with images fields) " +
+      "and/or a meta.image_library object or a blueprints array."
+    );
+  }
+
+  // sourceDeliverables lets the importer look up platform for auto-created cards
+  const sourceDeliverables = Array.isArray(parsed.deliverables) ? parsed.deliverables : [];
+
+  return { meta, assignments, blueprints, sourceDeliverables };
+}
+
+function importImageBlueprints(raw) {
+  let packet;
+  try {
+    packet = parseImagePacket(raw);
+  } catch (err) {
+    showMessage(err.message, "error");
+    return;
+  }
+
+  // Merge into imageState so multiple pastes layer together
+  Object.assign(imageState.meta, packet.meta);
+  Object.assign(imageState.assignments, packet.assignments);
+  Object.assign(imageState.blueprints, packet.blueprints);
+
+  // Auto-create minimal deliverable cards for any assignment that has no matching card.
+  // This lets an image-map packet stand alone — no separate deliverables import needed.
+  const newCards = [];
+  Object.keys(packet.assignments).forEach(title => {
+    const normTitle = normalizeTitle(title);
+    if (state.deliverables.find(d => normalizeTitle(d.deliverable) === normTitle)) return;
+    const src = packet.sourceDeliverables.find(d => (d.deliverable || "").trim() === title);
+    const platform = src && CONFIG.platforms.includes((src.platform || "").trim())
+      ? src.platform.trim()
+      : OTHER_SECTION;
+    newCards.push({
+      id: genId(),
+      platform,
+      deliverable_type: "",
+      priority: CONFIG.priorities[0],
+      status: "Idea",
+      deliverable: title,
+      angle: "",
+      seo_focus: [],
+      geo_focus: [],
+      aeo_focus: [],
+      context_blueprint: "",
+      notes: ""
+    });
+  });
+
+  if (newCards.length) {
+    state.deliverables = [...state.deliverables, ...newCards];
+    save();
+  }
+
+  saveImages();
+  buildDeliverableLabelMap();
+  renderSections();
+  renderImageLibrary();
+
+  const aCount = Object.keys(packet.assignments).length;
+  const bCount = Object.keys(packet.blueprints).length;
+  const parts = [];
+  if (aCount) parts.push(`${aCount} image assignment${aCount === 1 ? "" : "s"}`);
+  if (bCount) parts.push(`${bCount} image blueprint${bCount === 1 ? "" : "s"}`);
+  if (newCards.length) parts.push(`${newCards.length} card${newCards.length === 1 ? "" : "s"} created`);
+  showMessage(parts.join(" + ") + " imported.", "success");
+  $("#img-import-box").value = "";
+}
+
+function saveImages() {
+  try {
+    localStorage.setItem(CONFIG.imageStorageKey, JSON.stringify(imageState));
+  } catch (err) {
+    console.warn("Could not save image state:", err);
+  }
+}
+
+function loadImages() {
+  try {
+    const raw = localStorage.getItem(CONFIG.imageStorageKey);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      imageState.meta = parsed.meta || {};
+      imageState.assignments = parsed.assignments || {};
+      imageState.blueprints = parsed.blueprints || {};
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+/* Normalize a title for fuzzy matching: em/en-dash → hyphen, collapse spaces, lowercase. */
+function normalizeTitle(t) {
+  return String(t || "")
+    .replace(/[—–‒]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function getImageAssignment(deliverableTitle) {
+  // Exact match first
+  if (imageState.assignments[deliverableTitle]) return imageState.assignments[deliverableTitle];
+  // Normalized fallback (handles em-dash vs hyphen and similar punctuation drift)
+  const norm = normalizeTitle(deliverableTitle);
+  const entry = Object.entries(imageState.assignments).find(([k]) => normalizeTitle(k) === norm);
+  return entry ? entry[1] : null;
+}
+
+/* Build copy text for one image blueprint card. */
+function buildBlueprintCopyText(imgId, includeUsage = false) {
+  const bp = imageState.blueprints[imgId];
+  if (!bp) return `[${imgId}]\nNo blueprint loaded.`;
+
+  const lines = [];
+  lines.push(`[${imgId}]${bp.shot_type ? " — " + bp.shot_type : ""}`);
+  if (bp.vendor_ref) lines.push(`Vendor ref: ${bp.vendor_ref}`);
+  lines.push("");
+
+  if (bp.subject)    { lines.push("Subject:");    lines.push(bp.subject);    lines.push(""); }
+  if (bp.setting)    { lines.push("Setting:");    lines.push(bp.setting);    lines.push(""); }
+  if (bp.mood)       { lines.push("Mood:");       lines.push(bp.mood);       lines.push(""); }
+  if (bp.alt_text)   { lines.push("Alt text:");   lines.push(bp.alt_text);   lines.push(""); }
+  if (bp.prompt)     { lines.push("Prompt:");     lines.push(bp.prompt);     lines.push(""); }
+
+  if (includeUsage) {
+    const uses = Object.entries(imageState.assignments)
+      .filter(([, asgn]) => asgn.images.includes(imgId))
+      .map(([title]) => {
+        const label = getLabelByTitle(title);
+        return label !== title ? `${label} — ${title}` : title;
+      });
+    if (uses.length) {
+      lines.push("Used in:");
+      uses.forEach(t => lines.push(`• ${t}`));
+    }
+  }
+
+  return lines.join("\n").trim();
+}
+
+/* Build the HTML card for one image blueprint (used in inline expand + library). */
+function buildBlueprintCardHTML(imgId, showUsage = false) {
+  const bp = imageState.blueprints[imgId];
+  if (!bp) {
+    return `
+      <div class="img-prompt-card">
+        <div class="img-prompt-header">
+          <span class="chip chip-img">${escapeHTML(imgId)}</span>
+          <span class="img-no-prompt">No blueprint loaded yet — paste a blueprints packet to add it.</span>
+        </div>
+      </div>`;
+  }
+
+  const isVendorRef = bp.vendor_ref && bp.vendor_ref.toLowerCase().startsWith("yes");
+  const hasStructured = bp.subject || bp.setting || bp.mood || bp.vendor_ref || bp.alt_text;
+
+  const fields = [];
+  if (bp.subject)    fields.push(`<div class="bp-field"><span class="bp-field-label">Subject</span><p class="bp-field-text">${escapeHTML(bp.subject)}</p></div>`);
+  if (bp.setting)    fields.push(`<div class="bp-field"><span class="bp-field-label">Setting</span><p class="bp-field-text">${escapeHTML(bp.setting)}</p></div>`);
+  if (bp.mood)       fields.push(`<div class="bp-field"><span class="bp-field-label">Mood</span><p class="bp-field-text">${escapeHTML(bp.mood)}</p></div>`);
+  if (bp.vendor_ref) fields.push(`<div class="bp-field"><span class="bp-field-label">Vendor Ref</span><p class="bp-field-text ${isVendorRef ? "bp-vendor-yes" : "bp-vendor-no"}">${escapeHTML(bp.vendor_ref)}</p></div>`);
+  if (bp.alt_text)   fields.push(`<div class="bp-field"><span class="bp-field-label">Alt Text</span><p class="bp-field-text bp-alt">${escapeHTML(bp.alt_text)}</p></div>`);
+  if (bp.prompt)     fields.push(`<div class="bp-field"><span class="bp-field-label">Prompt</span><pre class="img-prompt-text">${escapeHTML(bp.prompt)}</pre></div>`);
+
+  let usageHTML = "";
+  if (showUsage) {
+    const uses = Object.entries(imageState.assignments)
+      .filter(([, asgn]) => asgn.images.includes(imgId))
+      .map(([title]) => ({ title, label: getLabelByTitle(title) }));
+    if (uses.length) {
+      usageHTML = `<div class="img-lib-usage">
+        <span class="img-usage-label">Used in</span>
+        <div class="chips">${uses.map(({ title, label }) =>
+          `<span class="chip chip-img-usage" title="${escapeHTML(title)}">${escapeHTML(label)}</span>`
+        ).join("")}</div>
+      </div>`;
+    }
+  }
+
+  return `
+    <div class="img-prompt-card">
+      <div class="img-prompt-header">
+        <span class="chip chip-img chip-img-loaded">${escapeHTML(imgId)}</span>
+        ${bp.shot_type ? `<span class="img-type-badge">${escapeHTML(bp.shot_type)}</span>` : ""}
+        ${bp.status    ? `<span class="img-status-badge">${escapeHTML(bp.status.replace(/_/g, " "))}</span>` : ""}
+        <button class="btn-mini" style="margin-left:auto" data-copyimgcard="${escapeHTML(imgId)}" data-imgusage="${showUsage}">Copy Card</button>
+      </div>
+      ${usageHTML}
+      ${fields.join("")}
+    </div>`;
+}
+
+/* Wire Copy Card buttons inside a container. */
+function wireBlueprintCopyEvents(container) {
+  container.querySelectorAll("[data-copyimgcard]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const includeUsage = btn.dataset.imgusage === "true";
+      const text = buildBlueprintCopyText(btn.dataset.copyimgcard, includeUsage);
+      copyToClipboard(text, btn, "Copy Card");
+    });
+  });
+}
+
+/* Build the image row HTML for a card (returns empty string when no assignment).
+ * Blueprint cards are always rendered inline — no toggle. */
+function buildImageRow(cardId, asgn) {
+  const chips = asgn.images.map(id => {
+    const loaded = !!imageState.blueprints[id];
+    return `<span class="chip chip-img${loaded ? " chip-img-loaded" : ""}">${escapeHTML(id)}</span>`;
+  }).join("");
+
+  const hasBlueprints = asgn.images.some(id => imageState.blueprints[id]);
+  const blueprintsHTML = hasBlueprints
+    ? `<div class="img-inline-blueprints">${asgn.images.map(id => buildBlueprintCardHTML(id, false)).join("")}</div>`
+    : "";
+
+  return `
+    <div class="img-row">
+      <div class="img-row-top">
+        <span class="field-label">Images</span>
+        <div class="chips">${chips}</div>
+      </div>
+      ${asgn.image_logic ? `<p class="img-logic">${escapeHTML(asgn.image_logic)}</p>` : ""}
+      ${blueprintsHTML}
+    </div>`;
+}
+
+/* Render the full Image Library section at the bottom of the page. */
+function renderImageLibrary() {
+  const container = $("#image-library");
+
+  const hasBp = Object.keys(imageState.blueprints).length > 0;
+  const hasAsgn = Object.keys(imageState.assignments).length > 0;
+
+  if (!hasBp && !hasAsgn) {
+    container.style.display = "none";
+    return;
+  }
+  container.style.display = "";
+
+  // Build usage map: IMG ID → list of deliverable titles that reference it
+  const usage = {};
+  Object.entries(imageState.assignments).forEach(([title, asgn]) => {
+    asgn.images.forEach(id => {
+      (usage[id] = usage[id] || []).push(title);
+    });
+  });
+
+  // All IMG IDs from both sources, numerically sorted
+  const allIds = [...new Set([
+    ...Object.keys(imageState.blueprints),
+    ...Object.values(imageState.assignments).flatMap(a => a.images)
+  ])].sort((a, b) => {
+    const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+    const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+    return na !== nb ? na - nb : a.localeCompare(b);
+  });
+
+  const meta = imageState.meta;
+  const campaign = meta.campaign || "";
+
+  const libCards = allIds.map(id => buildBlueprintCardHTML(id, true)).join("");
+
+  container.innerHTML = `
+    <div class="section-head">
+      <h2 class="section-title">Image Library</h2>
+      <span class="section-count">${allIds.length}</span>
+      ${campaign ? `<span class="img-lib-campaign">${escapeHTML(campaign)}</span>` : ""}
+    </div>
+    ${meta.blocker ? `<div class="img-blocker">${escapeHTML(meta.blocker)}</div>` : ""}
+    <div class="img-library-grid">${libCards}</div>
+  `;
+
+  wireBlueprintCopyEvents(container);
 }
 
 /* =========================================================================
@@ -423,9 +868,11 @@ function importFromText(raw) {
  * ========================================================================= */
 
 function render() {
+  buildDeliverableLabelMap();
   applyMetaToHeader();
   renderStats();
   renderSections();
+  renderImageLibrary();
 }
 
 function applyMetaToHeader() {
@@ -562,15 +1009,21 @@ function statusSelect(d) {
 }
 
 function renderCard(d) {
+  const asgn = getImageAssignment(d.deliverable);
+  const imgRow = asgn ? buildImageRow(d.id, asgn) : "";
+  const label = getDeliverableLabel(d);
+
   return `
   <article class="card" data-id="${d.id}">
     <div class="card-top">
       <span class="badge ${priorityClass(d.priority)}">${escapeHTML(d.priority)}</span>
+      ${label ? `<span class="card-del-label">${escapeHTML(label)}</span>` : ""}
       ${statusSelect(d)}
     </div>
 
     <h3 class="card-title">${escapeHTML(d.deliverable)}</h3>
     ${d.deliverable_type ? `<div class="card-type">${escapeHTML(d.deliverable_type)}</div>` : ""}
+    ${d.url ? `<a class="card-url" href="https://${d.url.replace(/^https?:\/\//, "")}" target="_blank" rel="noopener">${escapeHTML(d.url)}</a>` : ""}
 
     <div class="field">
       <span class="field-label">Angle</span>
@@ -591,6 +1044,8 @@ function renderCard(d) {
       <span class="field-label">Notes</span>
       <p class="field-text">${escapeHTML(d.notes)}</p>
     </div>` : ""}
+
+    ${imgRow}
 
     <div class="card-actions">
       <button class="btn-mini" data-act="copy" data-id="${d.id}">Copy Card</button>
@@ -629,6 +1084,15 @@ function onCardChange(e) {
 }
 
 function onCardClick(e) {
+  // Blueprint Copy Card buttons (inside inline blueprint cards)
+  const bpBtn = e.target.closest("[data-copyimgcard]");
+  if (bpBtn) {
+    const includeUsage = bpBtn.dataset.imgusage === "true";
+    const text = buildBlueprintCopyText(bpBtn.dataset.copyimgcard, includeUsage);
+    copyToClipboard(text, bpBtn, "Copy Card");
+    return;
+  }
+
   const btn = e.target.closest("[data-act]");
   if (!btn) return;
   const act = btn.dataset.act;
@@ -646,6 +1110,7 @@ function copyCard(id, btn) {
   lines.push("");
   lines.push(d.deliverable);
   if (d.deliverable_type) lines.push(d.deliverable_type);
+  if (d.url) lines.push(d.url);
   lines.push("");
   lines.push("Angle:");
   lines.push(d.angle);
@@ -654,6 +1119,22 @@ function copyCard(id, btn) {
   if (d.aeo_focus.length) { lines.push(""); lines.push("AEO:"); d.aeo_focus.forEach(a => lines.push(a)); }
   lines.push(""); lines.push("Context:"); lines.push(d.context_blueprint);
   if (d.notes) { lines.push(""); lines.push("Notes:"); lines.push(d.notes); }
+
+  // Append image blueprints if any are assigned and loaded
+  const asgn = getImageAssignment(d.deliverable);
+  if (asgn && asgn.images.length) {
+    const bpTexts = asgn.images
+      .map(imgId => buildBlueprintCopyText(imgId, false))
+      .filter(t => !t.includes("No blueprint loaded"));
+    if (bpTexts.length) {
+      lines.push("");
+      lines.push("— Image Blueprints —");
+      bpTexts.forEach((bp, i) => {
+        if (i > 0) lines.push("");
+        lines.push(bp);
+      });
+    }
+  }
 
   copyToClipboard(lines.join("\n"), btn, "Copy Card");
 }
@@ -703,6 +1184,9 @@ function toggleEdit(id) {
       <label class="ed ed-full">Deliverable title
         <input type="text" data-f="deliverable" value="${escapeHTML(d.deliverable)}">
       </label>
+      <label class="ed ed-full">URL
+        <input type="text" data-f="url" value="${escapeHTML(d.url || "")}">
+      </label>
       <label class="ed ed-full">Angle
         <textarea data-f="angle" rows="2">${escapeHTML(d.angle)}</textarea>
       </label>
@@ -750,7 +1234,8 @@ function saveEdit(id, wrap) {
     geo_focus: toArray(get("geo_focus")),
     aeo_focus: toArray(get("aeo_focus")),
     context_blueprint: get("context_blueprint").trim() || d.context_blueprint,
-    notes: get("notes").trim()
+    notes: get("notes").trim(),
+    url: get("url").trim()
   };
 
   const idx = state.deliverables.findIndex(x => x.id === id);
@@ -882,9 +1367,11 @@ function populateFilterDropdowns() {
 }
 
 function clearDashboard() {
-  if (!confirm("Clear the dashboard? This wipes all imported deliverables and saved changes.")) return;
+  if (!confirm("Clear the dashboard? This wipes all deliverables, image blueprints, and saved changes.")) return;
   state = { meta: {}, deliverables: [] };
+  imageState = { meta: {}, assignments: {}, blueprints: {} };
   try { localStorage.removeItem(CONFIG.storageKey); } catch (e) {}
+  try { localStorage.removeItem(CONFIG.imageStorageKey); } catch (e) {}
   $("#import-box").value = "";
   render();
   showMessage("Dashboard cleared.", "info");
@@ -918,6 +1405,17 @@ function init() {
   $("#btn-copy-qa").addEventListener("click", (e) =>
     copyToClipboard(QA_PROMPT, e.currentTarget, "Copy Accuracy QA Prompt"));
 
+  // Image blueprints import.
+  $("#btn-img-import").addEventListener("click", () => importImageBlueprints($("#img-import-box").value));
+  $("#btn-img-clear").addEventListener("click", () => {
+    if (!confirm("Clear all image blueprints and assignments?")) return;
+    imageState = { meta: {}, assignments: {}, blueprints: {} };
+    saveImages();
+    renderSections();
+    renderImageLibrary();
+    showMessage("Image blueprints cleared.", "info");
+  });
+
   // Filters (live).
   ["#filter-search", "#filter-platform", "#filter-priority", "#filter-status"].forEach(sel => {
     const el = $(sel);
@@ -927,6 +1425,7 @@ function init() {
 
   // Load saved data if present.
   load();
+  loadImages();
   render();
 }
 

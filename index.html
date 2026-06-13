@@ -67,6 +67,20 @@
       </div>
     </section>
 
+    <!-- ============ IMAGE BLUEPRINTS IMPORT ============ -->
+    <section class="panel img-import-panel">
+      <span class="panel-label">Paste Image Blueprints</span>
+      <p class="img-import-desc">
+        Paste the image assignment packet from Claude — maps which images go to which deliverable and carries the generation prompts. Deliverable titles must match exactly. Paste multiple times to layer assignments + prompts.
+      </p>
+      <textarea id="img-import-box" class="import-box img-import-box"
+        placeholder="Paste a BEGIN_SOVEREIGN_IMAGE_BLUEPRINTS_V1 packet here…&#10;&#10;Accepts two formats:&#10;• Assignment packet — deliverables with images + image_logic fields&#10;• Blueprint packet — blueprints array with id, caption, type, status, prompt&#10;• Combined — both in one paste"></textarea>
+      <div class="import-buttons">
+        <button id="btn-img-import" class="btn btn-img-primary">Import Image Blueprints</button>
+        <button id="btn-img-clear" class="btn">Clear Images</button>
+      </div>
+    </section>
+
     <!-- ============ FILTERS ============ -->
     <section class="panel filters">
       <input type="search" id="filter-search" class="filter-search" placeholder="Search deliverables…" />
@@ -113,6 +127,9 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
 
     <!-- ============ PLATFORM SECTIONS ============ -->
     <main id="sections" class="sections"></main>
+
+    <!-- ============ IMAGE LIBRARY ============ -->
+    <div id="image-library" class="image-library" style="display:none;"></div>
 
     <footer class="footer">
       <span>Sovereign Strategy Deliverables Dashboard — static, local, no backend.</span>
