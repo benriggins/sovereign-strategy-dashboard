@@ -701,7 +701,11 @@ function buildBlueprintCardHTML(imgId, showUsage = false) {
     ? `<a class="bp-image-link" href="${escapeHTML(bp.image_url)}" target="_blank" rel="noopener">
         <img class="bp-image" src="${escapeHTML(bp.image_url)}" alt="${escapeHTML(bp.alt_text || imgId)}" loading="lazy"
           onerror="this.closest('.bp-image-wrap').classList.add('bp-image-missing')">
-       </a>`
+       </a>
+       <div class="bp-image-url-row">
+         <span class="bp-field-label">GCS URL</span>
+         <a class="bp-image-url" href="${escapeHTML(bp.image_url)}" target="_blank" rel="noopener">${escapeHTML(bp.image_url)}</a>
+       </div>`
     : "";
 
   return `
