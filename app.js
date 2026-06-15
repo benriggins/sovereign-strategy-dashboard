@@ -482,23 +482,30 @@ function parseImagePacket(raw) {
 
   // Parse meta.image_library → structured blueprint dict (IMG-01: { shot_type, subject, ... })
   const imgLib = parsed.meta && parsed.meta.image_library;
+  const gcsPattern = (parsed.meta && parsed.meta.gcs_url_pattern) || "";
   if (imgLib && typeof imgLib === "object" && !Array.isArray(imgLib)) {
     Object.entries(imgLib).forEach(([id, d]) => {
       if (!id || typeof d !== "object") return;
       const vendorRefStr = (d.vendor_ref || "").trim();
       const isVendorRef = vendorRefStr.toLowerCase().startsWith("yes");
+      const seoFilename = (d.seo_filename || "").trim();
+      const imageUrl = gcsPattern && seoFilename
+        ? gcsPattern.replace("[seo_filename]", seoFilename)
+        : "";
       blueprints[id] = {
         id,
-        caption:    (d.alt_text   || "").trim(),
-        type:       (d.shot_type  || "").trim(),
-        status:     isVendorRef ? "needs_reference" : "ready",
-        prompt:     (d.prompt     || "").trim(),
-        shot_type:  (d.shot_type  || "").trim(),
-        subject:    (d.subject    || "").trim(),
-        setting:    (d.setting    || "").trim(),
-        mood:       (d.mood       || "").trim(),
-        vendor_ref: (d.vendor_ref || "").trim(),
-        alt_text:   (d.alt_text   || "").trim()
+        caption:      (d.alt_text   || "").trim(),
+        type:         (d.shot_type  || "").trim(),
+        status:       isVendorRef ? "needs_reference" : "ready",
+        prompt:       (d.prompt     || "").trim(),
+        shot_type:    (d.shot_type  || "").trim(),
+        subject:      (d.subject    || "").trim(),
+        setting:      (d.setting    || "").trim(),
+        mood:         (d.mood       || "").trim(),
+        vendor_ref:   (d.vendor_ref || "").trim(),
+        alt_text:     (d.alt_text   || "").trim(),
+        seo_filename: seoFilename,
+        image_url:    imageUrl
       };
     });
   }
@@ -628,6 +635,7 @@ function buildBlueprintCopyText(imgId, includeUsage = false) {
   if (bp.vendor_ref) lines.push(`Vendor ref: ${bp.vendor_ref}`);
   lines.push("");
 
+  if (bp.image_url)  { lines.push("Image:");      lines.push(bp.image_url);  lines.push(""); }
   if (bp.subject)    { lines.push("Subject:");    lines.push(bp.subject);    lines.push(""); }
   if (bp.setting)    { lines.push("Setting:");    lines.push(bp.setting);    lines.push(""); }
   if (bp.mood)       { lines.push("Mood:");       lines.push(bp.mood);       lines.push(""); }
@@ -689,6 +697,13 @@ function buildBlueprintCardHTML(imgId, showUsage = false) {
     }
   }
 
+  const imageHTML = bp.image_url
+    ? `<a class="bp-image-link" href="${escapeHTML(bp.image_url)}" target="_blank" rel="noopener">
+        <img class="bp-image" src="${escapeHTML(bp.image_url)}" alt="${escapeHTML(bp.alt_text || imgId)}" loading="lazy"
+          onerror="this.closest('.bp-image-wrap').classList.add('bp-image-missing')">
+       </a>`
+    : "";
+
   return `
     <div class="img-prompt-card">
       <div class="img-prompt-header">
@@ -697,6 +712,7 @@ function buildBlueprintCardHTML(imgId, showUsage = false) {
         ${bp.status    ? `<span class="img-status-badge">${escapeHTML(bp.status.replace(/_/g, " "))}</span>` : ""}
         <button class="btn-mini" style="margin-left:auto" data-copyimgcard="${escapeHTML(imgId)}" data-imgusage="${showUsage}">Copy Card</button>
       </div>
+      ${imageHTML ? `<div class="bp-image-wrap">${imageHTML}</div>` : ""}
       ${usageHTML}
       ${fields.join("")}
     </div>`;

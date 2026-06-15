@@ -587,6 +587,24 @@ html, body {
   gap: 8px;
   margin-bottom: 8px;
 }
+.bp-image-wrap {
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: rgba(0,0,0,0.25);
+  line-height: 0;
+}
+.bp-image-wrap.bp-image-missing { display: none; }
+.bp-image-link { display: block; }
+.bp-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+  max-height: 220px;
+  transition: opacity 0.2s;
+}
+.bp-image:hover { opacity: 0.88; }
 .img-caption {
   color: var(--silver);
   font-size: 0.85rem;
