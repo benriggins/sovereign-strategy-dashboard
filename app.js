@@ -482,16 +482,13 @@ function parseImagePacket(raw) {
 
   // Parse meta.image_library → structured blueprint dict (IMG-01: { shot_type, subject, ... })
   const imgLib = parsed.meta && parsed.meta.image_library;
-  const gcsPattern = (parsed.meta && parsed.meta.gcs_url_pattern) || "";
   if (imgLib && typeof imgLib === "object" && !Array.isArray(imgLib)) {
     Object.entries(imgLib).forEach(([id, d]) => {
       if (!id || typeof d !== "object") return;
       const vendorRefStr = (d.vendor_ref || "").trim();
       const isVendorRef = vendorRefStr.toLowerCase().startsWith("yes");
-      const seoFilename = (d.seo_filename || "").trim();
-      const imageUrl = gcsPattern && seoFilename
-        ? gcsPattern.replace("[seo_filename]", seoFilename)
-        : "";
+      // Preserve any image_url already set by a manual GCS paste — never overwrite it from the packet
+      const existing = imageState.blueprints[id];
       blueprints[id] = {
         id,
         caption:      (d.alt_text   || "").trim(),
@@ -504,8 +501,8 @@ function parseImagePacket(raw) {
         mood:         (d.mood       || "").trim(),
         vendor_ref:   (d.vendor_ref || "").trim(),
         alt_text:     (d.alt_text   || "").trim(),
-        seo_filename: seoFilename,
-        image_url:    imageUrl
+        seo_filename: (d.seo_filename || "").trim(),
+        image_url:    (existing && existing.image_url) || ""
       };
     });
   }
