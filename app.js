@@ -524,6 +524,38 @@ function parseImagePacket(raw) {
   return { meta, assignments, blueprints, sourceDeliverables };
 }
 
+/* Extract the filename slug from a GCS URL.
+ * https://.../axeon-fst-industrial-process-water-skid-libertyces.webp → axeon-fst-... */
+function extractFilenameSlug(url) {
+  const m = url.trim().match(/\/([^\/]+)\.[^.\/]+$/);
+  return m ? m[1] : "";
+}
+
+function importGCSUrls(raw) {
+  const urls = raw.split(/\n/).map(s => s.trim()).filter(Boolean);
+  if (!urls.length) { showMessage("Paste at least one GCS URL.", "warn"); return; }
+
+  let matched = 0;
+  urls.forEach(url => {
+    const slug = extractFilenameSlug(url);
+    if (!slug) return;
+    const bp = Object.values(imageState.blueprints).find(b => b.seo_filename === slug);
+    if (bp) { bp.image_url = url; matched++; }
+  });
+
+  if (matched) {
+    saveImages();
+    buildDeliverableLabelMap();
+    renderSections();
+    renderImageLibrary();
+  }
+  showMessage(
+    `${matched} of ${urls.length} URL${urls.length === 1 ? "" : "s"} matched to blueprint cards.`,
+    matched ? "success" : "warn"
+  );
+  if (matched) $("#gcs-url-box").value = "";
+}
+
 function importImageBlueprints(raw) {
   let packet;
   try {
@@ -1427,6 +1459,7 @@ function init() {
 
   // Image blueprints import.
   $("#btn-img-import").addEventListener("click", () => importImageBlueprints($("#img-import-box").value));
+  $("#btn-gcs-import").addEventListener("click", () => importGCSUrls($("#gcs-url-box").value));
   $("#btn-img-clear").addEventListener("click", () => {
     if (!confirm("Clear all image blueprints and assignments?")) return;
     imageState = { meta: {}, assignments: {}, blueprints: {} };

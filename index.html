@@ -81,6 +81,18 @@
       </div>
     </section>
 
+    <section class="panel img-url-panel">
+      <span class="panel-label">Paste GCS Image URLs</span>
+      <p class="img-import-desc">
+        Paste one GCS URL per line. Each URL is matched to its blueprint card automatically by filename — no manual mapping needed.
+      </p>
+      <textarea id="gcs-url-box" class="import-box img-import-box"
+        placeholder="https://storage.googleapis.com/headquarters_001/SovereignHeadquartersWebsite/axeon-fst-industrial-process-water-skid-libertyces.webp&#10;https://storage.googleapis.com/headquarters_001/SovereignHeadquartersWebsite/axeon-fsd-dual-housing-ro-pretreatment-libertyces.webp&#10;…"></textarea>
+      <div class="import-buttons">
+        <button id="btn-gcs-import" class="btn btn-img-primary">Map GCS URLs</button>
+      </div>
+    </section>
+
     <!-- ============ FILTERS ============ -->
     <section class="panel filters">
       <input type="search" id="filter-search" class="filter-search" placeholder="Search deliverables…" />
