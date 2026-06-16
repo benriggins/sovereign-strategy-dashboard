@@ -465,17 +465,28 @@ function parseImagePacket(raw) {
     });
   }
 
-  // Parse blueprints array → prompt-style format
+  // Parse blueprints array → full structured format
   if (Array.isArray(parsed.blueprints)) {
-    parsed.blueprints.forEach(bp => {
-      if (!bp || !bp.id) return;
-      blueprints[bp.id.trim()] = {
-        id: bp.id.trim(),
-        caption: (bp.caption || "").trim(),
-        type: (bp.type || "").trim(),
-        status: (bp.status || "").trim(),
-        prompt: (bp.prompt || "").trim(),
-        shot_type: "", subject: "", setting: "", mood: "", vendor_ref: "", alt_text: ""
+    parsed.blueprints.forEach(d => {
+      if (!d || !d.id) return;
+      const id = d.id.trim();
+      const vendorRefStr = (d.vendor_ref || "").trim();
+      const isVendorRef = vendorRefStr.toLowerCase().startsWith("yes");
+      const existing = imageState.blueprints[id];
+      blueprints[id] = {
+        id,
+        caption:      (d.alt_text   || d.caption || "").trim(),
+        type:         (d.shot_type  || d.type    || "").trim(),
+        status:       d.status ? d.status.trim() : (isVendorRef ? "needs_reference" : "ready"),
+        prompt:       (d.prompt     || "").trim(),
+        shot_type:    (d.shot_type  || "").trim(),
+        subject:      (d.subject    || "").trim(),
+        setting:      (d.setting    || "").trim(),
+        mood:         (d.mood       || "").trim(),
+        vendor_ref:   vendorRefStr,
+        alt_text:     (d.alt_text   || "").trim(),
+        seo_filename: (d.seo_filename || "").trim(),
+        image_url:    (existing && existing.image_url) || ""
       };
     });
   }
@@ -726,14 +737,17 @@ function buildBlueprintCardHTML(imgId, showUsage = false) {
     }
   }
 
+  const gcsFilename = bp.image_url ? bp.image_url.split("/").pop() : "";
   const imageHTML = bp.image_url
-    ? `<a class="bp-image-link" href="${escapeHTML(bp.image_url)}" target="_blank" rel="noopener">
-        <img class="bp-image" src="${escapeHTML(bp.image_url)}" alt="${escapeHTML(bp.alt_text || imgId)}" loading="lazy"
-          onerror="this.closest('.bp-image-wrap').classList.add('bp-image-missing')">
-       </a>
+    ? `<div class="bp-image-wrap">
+         <a class="bp-image-link" href="${escapeHTML(bp.image_url)}" target="_blank" rel="noopener">
+           <img class="bp-image" src="${escapeHTML(bp.image_url)}" alt="${escapeHTML(bp.alt_text || imgId)}" loading="lazy"
+             onerror="this.closest('.bp-image-wrap').classList.add('bp-image-missing')">
+         </a>
+       </div>
        <div class="bp-image-url-row">
-         <span class="bp-field-label">GCS URL</span>
-         <a class="bp-image-url" href="${escapeHTML(bp.image_url)}" target="_blank" rel="noopener">${escapeHTML(bp.image_url)}</a>
+         <span class="bp-field-label">GCS</span>
+         <a class="bp-image-url" href="${escapeHTML(bp.image_url)}" target="_blank" rel="noopener" title="${escapeHTML(bp.image_url)}">${escapeHTML(gcsFilename)} ↗</a>
        </div>`
     : "";
 
@@ -745,7 +759,7 @@ function buildBlueprintCardHTML(imgId, showUsage = false) {
         ${bp.status    ? `<span class="img-status-badge">${escapeHTML(bp.status.replace(/_/g, " "))}</span>` : ""}
         <button class="btn-mini" style="margin-left:auto" data-copyimgcard="${escapeHTML(imgId)}" data-imgusage="${showUsage}">Copy Card</button>
       </div>
-      ${imageHTML ? `<div class="bp-image-wrap">${imageHTML}</div>` : ""}
+      ${imageHTML}
       ${usageHTML}
       ${fields.join("")}
     </div>`;
