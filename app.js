@@ -539,15 +539,55 @@ function extractFilenameSlug(url) {
   return m ? m[1] : "";
 }
 
+/* Token-based Jaccard similarity between seo_filename slug and a GCS file slug.
+ * Handles cases where the uploaded filename has extra words (e.g. "open-housing" vs "housing"). */
+function slugMatchScore(seoFilename, gcsSlug) {
+  if (!seoFilename || !gcsSlug) return 0;
+  if (seoFilename === gcsSlug) return 1.0;
+  const seoToks = new Set(seoFilename.toLowerCase().split(/-+/).filter(Boolean));
+  const gcsToks = new Set(gcsSlug.toLowerCase().split(/-+/).filter(Boolean));
+  let inter = 0;
+  seoToks.forEach(t => { if (gcsToks.has(t)) inter++; });
+  const union = new Set([...seoToks, ...gcsToks]).size;
+  return union ? inter / union : 0;
+}
+
+/* Set a GCS URL on a blueprint card — shared by paste-box import and inline card inputs. */
+function setBlueprintUrl(imgId, url) {
+  const bp = imageState.blueprints[imgId];
+  if (!bp) return;
+  bp.image_url = url;
+  saveImages();
+  buildDeliverableLabelMap();
+  renderSections();
+  renderImageLibrary();
+}
+
 function importGCSUrls(raw) {
   const urls = raw.split(/\n/).map(s => s.trim()).filter(Boolean);
   if (!urls.length) { showMessage("Paste at least one GCS URL.", "warn"); return; }
 
   let matched = 0;
+  let fuzzyCount = 0;
+  const bpList = Object.values(imageState.blueprints).filter(b => b.seo_filename);
+
   urls.forEach(url => {
     const slug = extractFilenameSlug(url);
     if (!slug) return;
-    const bp = Object.values(imageState.blueprints).find(b => b.seo_filename === slug);
+
+    // 1. Exact match
+    let bp = bpList.find(b => b.seo_filename === slug);
+
+    // 2. Fuzzy match — pick highest-scoring candidate at or above threshold
+    if (!bp) {
+      let bestScore = 0;
+      bpList.forEach(b => {
+        const score = slugMatchScore(b.seo_filename, slug);
+        if (score > bestScore && score >= 0.7) { bestScore = score; bp = b; }
+      });
+      if (bp) fuzzyCount++;
+    }
+
     if (bp) { bp.image_url = url; matched++; }
   });
 
@@ -557,8 +597,9 @@ function importGCSUrls(raw) {
     renderSections();
     renderImageLibrary();
   }
+  const fuzzyNote = fuzzyCount ? ` (${fuzzyCount} fuzzy-matched by slug similarity)` : "";
   showMessage(
-    `${matched} of ${urls.length} URL${urls.length === 1 ? "" : "s"} matched to blueprint cards.`,
+    `${matched} of ${urls.length} URL${urls.length === 1 ? "" : "s"} matched to blueprint cards${fuzzyNote}.`,
     matched ? "success" : "warn"
   );
   if (matched) $("#gcs-url-box").value = "";
@@ -751,6 +792,23 @@ function buildBlueprintCardHTML(imgId, showUsage = false) {
        </div>`
     : "";
 
+  const slugRow = bp.seo_filename
+    ? `<div class="bp-slug-row">
+         <span class="bp-field-label">Slug</span>
+         <code class="bp-slug-code">${escapeHTML(bp.seo_filename)}</code>
+       </div>`
+    : "";
+
+  const urlEditRow = `
+    <div class="bp-url-edit-row">
+      <input class="bp-url-input" type="url"
+        placeholder="Paste GCS URL to link this card…"
+        data-urlimgid="${escapeHTML(imgId)}"
+        value="${escapeHTML(bp.image_url || "")}">
+      <button class="btn-mini btn-mini-set" data-setimgurl="${escapeHTML(imgId)}">${bp.image_url ? "Replace" : "Set URL"}</button>
+      ${bp.image_url ? `<button class="btn-mini btn-mini-rm" data-rmimgurl="${escapeHTML(imgId)}" title="Remove GCS link">✕</button>` : ""}
+    </div>`;
+
   return `
     <div class="img-prompt-card">
       <div class="img-prompt-header">
@@ -760,18 +818,36 @@ function buildBlueprintCardHTML(imgId, showUsage = false) {
         <button class="btn-mini" style="margin-left:auto" data-copyimgcard="${escapeHTML(imgId)}" data-imgusage="${showUsage}">Copy Card</button>
       </div>
       ${imageHTML}
+      ${slugRow}
       ${usageHTML}
       ${fields.join("")}
+      ${urlEditRow}
     </div>`;
 }
 
-/* Wire Copy Card buttons inside a container. */
+/* Wire blueprint card buttons (Copy Card + inline URL set/remove) inside a container. */
 function wireBlueprintCopyEvents(container) {
   container.querySelectorAll("[data-copyimgcard]").forEach(btn => {
     btn.addEventListener("click", () => {
       const includeUsage = btn.dataset.imgusage === "true";
       const text = buildBlueprintCopyText(btn.dataset.copyimgcard, includeUsage);
       copyToClipboard(text, btn, "Copy Card");
+    });
+  });
+  container.querySelectorAll("[data-setimgurl]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.setimgurl;
+      const input = btn.closest(".bp-url-edit-row")?.querySelector(`[data-urlimgid="${id}"]`);
+      const url = input ? input.value.trim() : "";
+      if (!url) { showMessage("Paste a GCS URL first.", "warn"); return; }
+      setBlueprintUrl(id, url);
+      showMessage(`GCS URL set for ${id}.`, "success");
+    });
+  });
+  container.querySelectorAll("[data-rmimgurl]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      setBlueprintUrl(btn.dataset.rmimgurl, "");
+      showMessage(`GCS URL removed from ${btn.dataset.rmimgurl}.`, "success");
     });
   });
 }
@@ -1153,6 +1229,24 @@ function onCardClick(e) {
     const includeUsage = bpBtn.dataset.imgusage === "true";
     const text = buildBlueprintCopyText(bpBtn.dataset.copyimgcard, includeUsage);
     copyToClipboard(text, bpBtn, "Copy Card");
+    return;
+  }
+
+  // Inline blueprint URL set/remove buttons
+  const setBtn = e.target.closest("[data-setimgurl]");
+  if (setBtn) {
+    const id = setBtn.dataset.setimgurl;
+    const input = setBtn.closest(".bp-url-edit-row")?.querySelector(`[data-urlimgid="${id}"]`);
+    const url = input ? input.value.trim() : "";
+    if (!url) { showMessage("Paste a GCS URL first.", "warn"); return; }
+    setBlueprintUrl(id, url);
+    showMessage(`GCS URL set for ${id}.`, "success");
+    return;
+  }
+  const rmBtn = e.target.closest("[data-rmimgurl]");
+  if (rmBtn) {
+    setBlueprintUrl(rmBtn.dataset.rmimgurl, "");
+    showMessage(`GCS URL removed from ${rmBtn.dataset.rmimgurl}.`, "success");
     return;
   }
 
