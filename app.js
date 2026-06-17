@@ -504,16 +504,62 @@ function parseImagePacket(raw) {
   const assignments = {};
   const blueprints = {};
 
-  // Parse deliverables array → image assignments (expects "images" + "deliverable" fields)
+  // Parse deliverables array → image assignments
+  // Supports two images formats:
+  //   • New: array of blueprint objects { id, seo_filename, shot_type, … }
+  //   • Old: array of IMG-ID strings or a space/comma-separated string
   if (Array.isArray(parsed.deliverables)) {
     parsed.deliverables.forEach(d => {
       if (!d || !d.deliverable || !d.images) return;
+      const title = d.deliverable.trim();
+
+      if (Array.isArray(d.images) && d.images.length > 0 &&
+          typeof d.images[0] === "object" && d.images[0] !== null) {
+        // New embedded format: each element is a full blueprint object.
+        // Key blueprints by seo_filename (unique per physical image) so the
+        // same GCS photo doesn't create duplicate blueprint records.
+        const keys = [];
+        d.images.forEach(imgObj => {
+          if (!imgObj || !imgObj.id) return;
+          const displayId   = String(imgObj.id).trim();
+          const seoFilename = (imgObj.seo_filename || "").trim();
+          const bpKey       = seoFilename || displayId;
+          keys.push(bpKey);
+          const vendorRefStr = (imgObj.vendor_ref || "").trim();
+          const isVendorRef  = vendorRefStr.toLowerCase().startsWith("yes");
+          const existing     = imageState.blueprints[bpKey];
+          blueprints[bpKey] = {
+            id:           displayId,   // friendly label e.g. "IMG-01", "IMG-LC-03"
+            caption:      (imgObj.alt_text  || "").trim(),
+            type:         (imgObj.shot_type || "").trim(),
+            status:       isVendorRef ? "needs_reference" : "ready",
+            prompt:       (imgObj.prompt    || "").trim(),
+            shot_type:    (imgObj.shot_type || "").trim(),
+            subject:      (imgObj.subject   || "").trim(),
+            setting:      (imgObj.setting   || "").trim(),
+            mood:         (imgObj.mood      || "").trim(),
+            vendor_ref:   vendorRefStr,
+            alt_text:     (imgObj.alt_text  || "").trim(),
+            seo_filename: seoFilename,
+            image_url:    (existing && existing.image_url) || ""
+          };
+        });
+        if (keys.length) {
+          assignments[title] = {
+            images: keys,
+            image_logic: (d.image_logic || "").trim()
+          };
+        }
+        return;
+      }
+
+      // Old format: string or array of IMG-ID strings.
       const rawImgs = typeof d.images === "string"
         ? d.images.split(/[\s,]+/)
         : (Array.isArray(d.images) ? d.images : []);
-      const imgs = rawImgs.map(s => s.trim()).filter(s => /^IMG-\d+$/i.test(s));
+      const imgs = rawImgs.map(s => String(s).trim()).filter(s => /^IMG-/i.test(s));
       if (imgs.length) {
-        assignments[d.deliverable.trim()] = {
+        assignments[title] = {
           images: imgs,
           image_logic: (d.image_logic || "").trim()
         };
@@ -767,8 +813,9 @@ function buildBlueprintCopyText(imgId, includeUsage = false) {
   const bp = imageState.blueprints[imgId];
   if (!bp) return `[${imgId}]\nNo blueprint loaded.`;
 
+  const displayId = bp.id || imgId;
   const lines = [];
-  lines.push(`[${imgId}]${bp.shot_type ? " — " + bp.shot_type : ""}`);
+  lines.push(`[${displayId}]${bp.shot_type ? " — " + bp.shot_type : ""}`);
   if (bp.vendor_ref) lines.push(`Vendor ref: ${bp.vendor_ref}`);
   lines.push("");
 
@@ -868,7 +915,7 @@ function buildBlueprintCardHTML(imgId, showUsage = false) {
   return `
     <div class="img-prompt-card">
       <div class="img-prompt-header">
-        <span class="chip chip-img chip-img-loaded">${escapeHTML(imgId)}</span>
+        <span class="chip chip-img chip-img-loaded">${escapeHTML(bp.id || imgId)}</span>
         ${bp.shot_type ? `<span class="img-type-badge">${escapeHTML(bp.shot_type)}</span>` : ""}
         ${bp.status    ? `<span class="img-status-badge">${escapeHTML(bp.status.replace(/_/g, " "))}</span>` : ""}
         <button class="btn-mini" style="margin-left:auto" data-copyimgcard="${escapeHTML(imgId)}" data-imgusage="${showUsage}">Copy Card</button>
@@ -912,8 +959,9 @@ function wireBlueprintCopyEvents(container) {
  * Blueprint cards are always rendered inline — no toggle. */
 function buildImageRow(cardId, asgn) {
   const chips = asgn.images.map(id => {
-    const loaded = !!imageState.blueprints[id];
-    return `<span class="chip chip-img${loaded ? " chip-img-loaded" : ""}">${escapeHTML(id)}</span>`;
+    const bp = imageState.blueprints[id];
+    const label = bp ? (bp.id || id) : id;
+    return `<span class="chip chip-img${bp ? " chip-img-loaded" : ""}">${escapeHTML(label)}</span>`;
   }).join("");
 
   const hasBlueprints = asgn.images.some(id => imageState.blueprints[id]);
@@ -958,9 +1006,13 @@ function renderImageLibrary() {
     ...Object.keys(imageState.blueprints),
     ...Object.values(imageState.assignments).flatMap(a => a.images)
   ])].sort((a, b) => {
-    const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
-    const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
-    return na !== nb ? na - nb : a.localeCompare(b);
+    const bpA = imageState.blueprints[a];
+    const bpB = imageState.blueprints[b];
+    const sa = (bpA && bpA.id) ? bpA.id : a;
+    const sb = (bpB && bpB.id) ? bpB.id : b;
+    const na = parseInt(sa.replace(/\D/g, ""), 10) || 0;
+    const nb = parseInt(sb.replace(/\D/g, ""), 10) || 0;
+    return na !== nb ? na - nb : sa.localeCompare(sb);
   });
 
   const meta = imageState.meta;
