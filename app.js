@@ -510,7 +510,8 @@ function parseImagePacket(raw) {
   //   • Old: array of IMG-ID strings or a space/comma-separated string
   if (Array.isArray(parsed.deliverables)) {
     parsed.deliverables.forEach(d => {
-      if (!d || !d.deliverable || !d.images) return;
+      if (!d || !d.deliverable) return;
+      if (!d.images && !d.primary_image) return;
       const title = d.deliverable.trim();
 
       if (Array.isArray(d.images) && d.images.length > 0 &&
@@ -547,6 +548,18 @@ function parseImagePacket(raw) {
         if (keys.length) {
           assignments[title] = {
             images: keys,
+            image_logic: (d.image_logic || "").trim()
+          };
+        }
+        return;
+      }
+
+      // primary_image: single IMG-ID string — Steps 8+9 combined format.
+      if (!d.images && d.primary_image) {
+        const imgId = String(d.primary_image).trim();
+        if (/^IMG-/i.test(imgId)) {
+          assignments[title] = {
+            images: [imgId],
             image_logic: (d.image_logic || "").trim()
           };
         }
@@ -620,11 +633,40 @@ function parseImagePacket(raw) {
     });
   }
 
+  // Root-level image_library array — Steps 8+9 combined format.
+  // Array of { id, seo_filename, shot_type, vendor_ref, alt_text, status, subject, setting, mood, … }
+  // Blueprints are keyed by IMG-ID (stable across this format).
+  if (Array.isArray(parsed.image_library)) {
+    parsed.image_library.forEach(d => {
+      if (!d || !d.id) return;
+      const id = String(d.id).trim();
+      const vendorRefStr = (d.vendor_ref || "").trim();
+      const isVendorRef = vendorRefStr.toLowerCase().startsWith("yes");
+      const rawStatus = (d.status || "").trim().toLowerCase();
+      const existing = imageState.blueprints[id];
+      blueprints[id] = {
+        id,
+        caption:      (d.alt_text    || "").trim(),
+        type:         (d.shot_type   || "").trim(),
+        status:       rawStatus === "generate" ? "generate" : (isVendorRef ? "needs_reference" : "ready"),
+        prompt:       (d.prompt      || "").trim(),
+        shot_type:    (d.shot_type   || "").trim(),
+        subject:      (d.subject     || "").trim(),
+        setting:      (d.setting     || "").trim(),
+        mood:         (d.mood        || "").trim(),
+        vendor_ref:   vendorRefStr,
+        alt_text:     (d.alt_text    || "").trim(),
+        seo_filename: (d.seo_filename || "").trim(),
+        image_url:    (existing && existing.image_url) || ""
+      };
+    });
+  }
+
   if (!Object.keys(assignments).length && !Object.keys(blueprints).length) {
     throw new Error(
       "No image assignments or blueprints found. " +
-      "Paste a packet with a \"deliverables\" array (with images fields) " +
-      "and/or a meta.image_library object or a blueprints array."
+      "Paste a packet with a \"deliverables\" array (with images or primary_image fields), " +
+      "a root-level image_library array, a meta.image_library object, or a blueprints array."
     );
   }
 
