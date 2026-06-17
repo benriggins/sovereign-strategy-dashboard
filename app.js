@@ -13,6 +13,12 @@ const CONFIG = {
   storageKey: "sovereign_strategy_deliverables_v1",
   imageStorageKey: "sovereign_strategy_images_v1",
   platforms: [
+    "Solutions Hub | Pillar",
+    "Solutions Hub | Blog",
+    "Industries Hub | Pillar",
+    "Industries Hub | Application",
+    "Products Hub | Pillar",
+    "Products Hub | Product Page",
     "Webpage",
     "Product Page",
     "Blog",
@@ -78,9 +84,15 @@ END_SOVEREIGN_DELIVERABLES_V1
 
 Allowed platforms:
 
-* Webpage
-* Product Page
-* Blog
+Website (use these for all web pages):
+* Solutions Hub | Pillar
+* Solutions Hub | Blog
+* Industries Hub | Pillar
+* Industries Hub | Application
+* Products Hub | Pillar
+* Products Hub | Product Page
+
+Social / Video:
 * YouTube / NotebookLM Video
 * Instagram Video
 * Instagram Carousel
@@ -88,6 +100,11 @@ Allowed platforms:
 * LinkedIn James Post
 * LinkedIn LibertyCES Post
 * LinkedIn Newsletter
+
+Legacy (accepted but prefer hub platforms above for web):
+* Webpage
+* Product Page
+* Blog
 
 Allowed priorities:
 
@@ -152,6 +169,12 @@ packet until it is 100% error-free.`;
 
 /* Platform → short label prefix for deliverable numbering. */
 const PLATFORM_ABBREV = {
+  "Solutions Hub | Pillar":       "Sol Pillar",
+  "Solutions Hub | Blog":         "Sol Blog",
+  "Industries Hub | Pillar":      "Ind Pillar",
+  "Industries Hub | Application": "Ind App",
+  "Products Hub | Pillar":        "Prod Pillar",
+  "Products Hub | Product Page":  "Prod Page",
   "Webpage":                      "Webpage",
   "Product Page":                 "Product Pg",
   "Blog":                         "Blog",
@@ -169,6 +192,39 @@ const PLATFORM_ABBREV = {
  * ========================================================================= */
 
 const OTHER_SECTION = "Other";
+
+/* =========================================================================
+ * Website Hub Configuration
+ * ========================================================================= */
+
+const WEBSITE_HUB_CONFIG = [
+  {
+    name: "Solutions Hub",
+    pillarPlatforms: new Set(["Solutions Hub | Pillar"]),
+    platforms: new Set(["Solutions Hub | Pillar", "Solutions Hub | Blog", "Webpage", "Blog"])
+  },
+  {
+    name: "Industries Hub",
+    pillarPlatforms: new Set(["Industries Hub | Pillar"]),
+    platforms: new Set(["Industries Hub | Pillar", "Industries Hub | Application"])
+  },
+  {
+    name: "Products Hub",
+    pillarPlatforms: new Set(["Products Hub | Pillar"]),
+    platforms: new Set(["Products Hub | Pillar", "Products Hub | Product Page", "Product Page"])
+  }
+];
+
+const WEBSITE_PLATFORMS = new Set(
+  WEBSITE_HUB_CONFIG.flatMap(h => [...h.platforms])
+);
+
+function getHubForPlatform(platform) {
+  for (const hub of WEBSITE_HUB_CONFIG) {
+    if (hub.platforms.has(platform)) return hub.name;
+  }
+  return null;
+}
 
 let state = {
   meta: {},          // { client, project, topic, created_by, notes }
@@ -1076,7 +1132,6 @@ function renderSections() {
   const container = $("#sections");
   const filtered = getFiltered();
 
-  // Empty state: no data at all.
   if (state.deliverables.length === 0) {
     container.innerHTML = "";
     $("#empty-state").style.display = "";
@@ -1085,29 +1140,36 @@ function renderSections() {
   }
   $("#empty-state").style.display = "none";
 
-  // Data exists but filters matched nothing.
-  if (filtered.length === 0) {
+  // Partition filtered items into website hub items vs everything else.
+  const hasWebsiteInState = state.deliverables.some(d => getHubForPlatform(d.platform) !== null);
+  const filteredWebsite = filtered.filter(d => getHubForPlatform(d.platform) !== null);
+  const filteredOther = filtered.filter(d => getHubForPlatform(d.platform) === null);
+
+  // Build non-website platform groups (CONFIG order, Other last).
+  const nonWebsitePlatforms = CONFIG.platforms.filter(p => !WEBSITE_PLATFORMS.has(p));
+  const order = [...nonWebsitePlatforms, OTHER_SECTION];
+  const groups = {};
+  filteredOther.forEach(d => {
+    const key = CONFIG.platforms.includes(d.platform) && !WEBSITE_PLATFORMS.has(d.platform)
+      ? d.platform : OTHER_SECTION;
+    (groups[key] = groups[key] || []).push(d);
+  });
+  const hasOtherResults = order.some(p => groups[p]?.length);
+
+  if (!hasWebsiteInState && !hasOtherResults) {
     container.innerHTML = "";
     $("#no-results").style.display = "";
     return;
   }
   $("#no-results").style.display = "none";
 
-  // Group by platform, honoring CONFIG order, with "Other" last.
-  const order = [...CONFIG.platforms, OTHER_SECTION];
-  const groups = {};
-  filtered.forEach(d => {
-    const key = CONFIG.platforms.includes(d.platform) ? d.platform : OTHER_SECTION;
-    (groups[key] = groups[key] || []).push(d);
-  });
+  const parts = [];
+  if (hasWebsiteInState) parts.push(renderWebsiteSection(filteredWebsite));
+  order.filter(p => groups[p]?.length).forEach(p => parts.push(renderSection(p, groups[p])));
 
-  const html = order
-    .filter(p => groups[p] && groups[p].length)
-    .map(p => renderSection(p, groups[p]))
-    .join("");
-
-  container.innerHTML = html;
+  container.innerHTML = parts.join("");
   wireCardEvents(container);
+  wireHubToggles(container);
 }
 
 function renderSection(platform, items) {
@@ -1121,6 +1183,78 @@ function renderSection(platform, items) {
       <div class="card-grid">${cards}</div>
     </section>
   `;
+}
+
+function renderWebsiteSection(filteredItems) {
+  const hubsHTML = WEBSITE_HUB_CONFIG.map(hub => {
+    const hubItems = filteredItems.filter(d => hub.platforms.has(d.platform));
+    const pillarItems = hubItems.filter(d => hub.pillarPlatforms.has(d.platform));
+    const supportItems = hubItems.filter(d => !hub.pillarPlatforms.has(d.platform));
+    return renderHubGroup(hub.name, pillarItems, supportItems);
+  }).join("");
+
+  return `
+    <section class="platform-section website-super-section">
+      <div class="section-head">
+        <h2 class="section-title">Website &amp; Webpages</h2>
+      </div>
+      <div class="hub-groups">${hubsHTML}</div>
+    </section>
+  `;
+}
+
+function renderHubGroup(hubName, pillarItems, supportItems) {
+  const total = pillarItems.length + supportItems.length;
+  const hubId = hubName.toLowerCase().replace(/\s+/g, "-");
+  const pillarTitle = pillarItems.length ? pillarItems[0].deliverable : "";
+
+  let bodyHTML;
+  if (total === 0) {
+    bodyHTML = `<div class="hub-empty">No content planned for this hub yet.</div>`;
+  } else {
+    const pillarSection = pillarItems.length ? `
+      <div class="hub-pillar-section">
+        <div class="hub-pillar-label">
+          <span class="hub-pillar-tag">Pillar</span>
+          <div class="hub-pillar-rule"></div>
+        </div>
+        <div class="hub-pillar-card-wrap">
+          ${pillarItems.map(renderCard).join("")}
+        </div>
+      </div>` : "";
+
+    const supportSection = supportItems.length ? `
+      <div class="hub-support-section">
+        ${pillarItems.length ? `<div class="hub-support-label">Supporting Pages</div>` : ""}
+        <div class="card-grid">${supportItems.map(renderCard).join("")}</div>
+      </div>` : "";
+
+    bodyHTML = pillarSection + supportSection;
+  }
+
+  return `
+    <div class="hub-group" data-hub="${escapeHTML(hubId)}">
+      <div class="hub-header" data-toggle-hub="${escapeHTML(hubId)}">
+        <span class="hub-collapse-icon">▾</span>
+        <span class="hub-name">${escapeHTML(hubName)}</span>
+        ${total ? `<span class="hub-count">${total}</span>` : `<span class="hub-count hub-count-empty">0</span>`}
+        ${pillarTitle ? `<span class="hub-pillar-name">${escapeHTML(pillarTitle)}</span>` : ""}
+      </div>
+      <div class="hub-body" data-hub-body="${escapeHTML(hubId)}">
+        ${bodyHTML}
+      </div>
+    </div>
+  `;
+}
+
+function wireHubToggles(container) {
+  container.querySelectorAll("[data-toggle-hub]").forEach(header => {
+    header.addEventListener("click", () => {
+      const hubId = header.dataset.toggleHub;
+      const group = container.querySelector(`.hub-group[data-hub="${hubId}"]`);
+      if (group) group.classList.toggle("collapsed");
+    });
+  });
 }
 
 function chipList(label, arr, cls) {
