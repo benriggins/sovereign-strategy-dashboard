@@ -35,6 +35,15 @@
     <!-- ============ MESSAGE BANNER ============ -->
     <div id="message" class="message" role="status" aria-live="polite"></div>
 
+    <!-- ============ TAB NAV ============ -->
+    <nav class="tab-nav" role="tablist">
+      <button class="tab-btn tab-active" data-tab="deliverables" role="tab">Deliverables</button>
+      <button class="tab-btn" data-tab="storyboard" role="tab">Storyboard</button>
+    </nav>
+
+    <!-- ============ DELIVERABLES TAB ============ -->
+    <div id="deliverables-tab-content">
+
     <!-- ============ ACCURACY QA PROMPT ============ -->
     <section class="panel qa-panel">
       <span class="panel-label">Paste this research prompt</span>
@@ -142,6 +151,24 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
 
     <!-- ============ IMAGE LIBRARY ============ -->
     <div id="image-library" class="image-library" style="display:none;"></div>
+
+    </div><!-- /#deliverables-tab-content -->
+
+    <!-- ============ STORYBOARD TAB ============ -->
+    <div id="storyboard-tab-content" style="display:none;">
+      <section class="panel sb-import-panel">
+        <span class="panel-label">Paste YouTube Storyboard JSON</span>
+        <p class="sb-import-desc">Paste a <code>BEGIN_SOVEREIGN_STORYBOARD_V1</code> packet. Use <strong>Copy Conversion Prompt</strong> to get the Claude prompt that converts your Step 12 storyboard output into this format — then paste it back here.</p>
+        <textarea id="sb-import-box" class="import-box sb-import-box"
+          placeholder="BEGIN_SOVEREIGN_STORYBOARD_V1&#10;{&#10;  &quot;meta&quot;: { &quot;client&quot;: &quot;LibertyCES&quot;, &quot;project&quot;: &quot;...&quot;, &quot;runtime&quot;: &quot;4:30&quot; },&#10;  &quot;segments&quot;: [...],&#10;  &quot;thumbnail&quot;: {...}&#10;}&#10;END_SOVEREIGN_STORYBOARD_V1"></textarea>
+        <div class="import-buttons">
+          <button id="btn-sb-import" class="btn btn-primary">Import Storyboard</button>
+          <button id="btn-sb-clear" class="btn">Clear Storyboard</button>
+          <button id="btn-sb-copy-prompt" class="btn btn-ghost">Copy Conversion Prompt</button>
+        </div>
+      </section>
+      <div id="sb-content" class="sb-content" style="display:none;"></div>
+    </div><!-- /#storyboard-tab-content -->
 
     <footer class="footer">
       <span>Sovereign Strategy Deliverables Dashboard — static, local, no backend.</span>

@@ -1813,6 +1813,399 @@ function init() {
   load();
   loadImages();
   render();
+
+  // Storyboard tab.
+  initTabs();
+  loadStoryboard();
+  renderStoryboard();
+
+  $("#btn-sb-import").addEventListener("click", () => {
+    const raw = $("#sb-import-box").value.trim();
+    if (!raw) { showMessage("Nothing to import.", "warn"); return; }
+    const parsed = parseStoryboardPacket(raw);
+    if (!parsed) return;
+    storyboardState = parsed;
+    saveStoryboard();
+    renderStoryboard();
+    const pairs = (parsed.segments || []).reduce((n, s) => n + (s.pairs || []).length, 0);
+    showMessage(`Storyboard imported: ${pairs} pair${pairs !== 1 ? "s" : ""}${parsed.thumbnail ? " + thumbnail" : ""}.`, "success");
+  });
+
+  $("#btn-sb-clear").addEventListener("click", () => {
+    if (!confirm("Clear the storyboard?")) return;
+    storyboardState = null;
+    try { localStorage.removeItem(STORYBOARD_STORAGE_KEY); } catch(e) {}
+    $("#sb-import-box").value = "";
+    renderStoryboard();
+    showMessage("Storyboard cleared.", "info");
+  });
+
+  $("#btn-sb-copy-prompt").addEventListener("click", (e) =>
+    copyToClipboard(STORYBOARD_CONVERSION_PROMPT, e.currentTarget, "Copy Conversion Prompt"));
+}
+
+/* =========================================================================
+ * Storyboard Tab — Step 12 YouTube Storyboard parser + renderer
+ * ========================================================================= */
+
+const STORYBOARD_STORAGE_KEY = "sovereign_strategy_storyboard_v1";
+
+const STORYBOARD_CONVERSION_PROMPT = `Convert the Step 12 YouTube Storyboard output I'm about to paste into the SOVEREIGN_STORYBOARD_V1 JSON format below. Preserve every field verbatim — do not summarize, shorten, or rewrite any prompt, instruction, subject, camera, env, avoid, file, or alt text. Every word must be copied exactly as written.
+
+Output ONLY the JSON wrapped in:
+BEGIN_SOVEREIGN_STORYBOARD_V1
+{ ... }
+END_SOVEREIGN_STORYBOARD_V1
+
+JSON structure:
+
+{
+  "meta": {
+    "client": "LibertyCES",
+    "project": "",
+    "title": "",
+    "runtime": "",
+    "total_pairs": 0
+  },
+  "segments": [
+    {
+      "segment": 1,
+      "name": "Segment name (remove leading number and em-dash if present)",
+      "timecode": "0:00–0:20",
+      "voiceover": "Full voiceover text verbatim — every word.",
+      "pairs": [
+        {
+          "n": 1,
+          "image": {
+            "id": "IMAGE-01",
+            "style": "C",
+            "ref": null,
+            "timecode": "0:00–0:10",
+            "subject": "Verbatim subject line from the storyboard",
+            "env": "Verbatim env line",
+            "camera": "Verbatim camera line",
+            "prompt": "Verbatim full prompt text — every word",
+            "avoid": "Verbatim avoid line",
+            "file": "exact-filename-as-listed.jpg",
+            "alt": "Verbatim alt text"
+          },
+          "anim": {
+            "id": "ANIM-01",
+            "instruction": "Verbatim full animation instruction — every word"
+          }
+        }
+      ]
+    }
+  ],
+  "thumbnail": {
+    "style": "A",
+    "ref": "AXEON FSD",
+    "subject": "Verbatim subject",
+    "prompt": "Verbatim full prompt",
+    "avoid": "Verbatim avoid",
+    "file": "exact-filename.jpg",
+    "alt": "Verbatim alt text",
+    "overlay": {
+      "text": "IT LOOKED FINE.",
+      "placement": "Verbatim placement instruction",
+      "size": "Verbatim size instruction",
+      "weight": "Verbatim weight instruction",
+      "color": "Verbatim color instruction",
+      "treatment": "Verbatim treatment instruction"
+    },
+    "verify": "Verbatim verify line"
+  }
+}
+
+Field rules:
+• "style" → single letter only: "A", "B", "C", or "D"
+• "ref" → null if WITHOUT REF; the product name string if WITH REF (e.g. "AXEON FSD", "AXEON FST")
+• "segment" → integer (1, 2, 3…)
+• "n" → pair index integer
+• Every text field → verbatim from the source, nothing rewritten
+• No commentary, no explanation — output only the wrapped JSON packet`;
+
+let storyboardState = null;
+
+// Copy-text registry: avoids giant data-* attributes for long prompt text.
+const sbCopyRegistry = {};
+let sbCopySeq = 0;
+
+function sbRegister(text) {
+  const key = "sbc_" + (++sbCopySeq);
+  sbCopyRegistry[key] = text;
+  return key;
+}
+
+function saveStoryboard() {
+  if (!storyboardState) return;
+  try { localStorage.setItem(STORYBOARD_STORAGE_KEY, JSON.stringify(storyboardState)); } catch(e) {}
+}
+
+function loadStoryboard() {
+  try {
+    const raw = localStorage.getItem(STORYBOARD_STORAGE_KEY);
+    if (raw) storyboardState = JSON.parse(raw);
+  } catch(e) {}
+}
+
+function parseStoryboardPacket(text) {
+  const raw = text.trim();
+  const match = raw.match(/BEGIN_SOVEREIGN_STORYBOARD_V1\s*([\s\S]*?)\s*END_SOVEREIGN_STORYBOARD_V1/);
+  const jsonText = match ? match[1].trim() : raw;
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch(e) {
+    showMessage("Could not parse storyboard JSON — check the format.", "error");
+    return null;
+  }
+  if (!parsed.segments && !parsed.thumbnail) {
+    showMessage("No segments or thumbnail found in this packet.", "error");
+    return null;
+  }
+  return parsed;
+}
+
+/* ---- Copy text builders ---- */
+
+function sbImageCopyFull(img) {
+  const refLabel = img.ref ? `With Ref — ${img.ref}` : "Without Ref";
+  const lines = [`${img.id || "IMAGE"} | Style ${img.style || "?"} | ${refLabel}${img.timecode ? " | " + img.timecode : ""}`];
+  if (img.subject) lines.push(`\nSUBJECT\n${img.subject}`);
+  if (img.env)     lines.push(`\nENV\n${img.env}`);
+  if (img.camera)  lines.push(`\nCAMERA\n${img.camera}`);
+  if (img.prompt)  lines.push(`\nPROMPT\n${img.prompt}`);
+  if (img.avoid)   lines.push(`\nAVOID\n${img.avoid}`);
+  if (img.file)    lines.push(`\nFILE\n${img.file}`);
+  if (img.alt)     lines.push(`\nALT\n${img.alt}`);
+  return lines.join("\n");
+}
+
+function sbImageCopyPrompt(img) {
+  let text = img.prompt || "";
+  if (img.avoid) text += `\n\nAVOID: ${img.avoid}`;
+  return text;
+}
+
+function sbAnimCopyText(anim, imgId) {
+  let text = anim.id || "ANIM";
+  if (imgId) text += ` → ${imgId}`;
+  if (anim.instruction) text += `\n\n${anim.instruction}`;
+  return text;
+}
+
+function sbThumbCopyFull(thumb) {
+  const refLabel = thumb.ref ? `With Ref — ${thumb.ref}` : "Without Ref";
+  const lines = [`THUMBNAIL | Style ${thumb.style || "?"} | ${refLabel}`];
+  if (thumb.subject) lines.push(`\nSUBJECT\n${thumb.subject}`);
+  if (thumb.prompt)  lines.push(`\nPROMPT\n${thumb.prompt}`);
+  if (thumb.avoid)   lines.push(`\nAVOID\n${thumb.avoid}`);
+  if (thumb.file)    lines.push(`\nFILE\n${thumb.file}`);
+  if (thumb.alt)     lines.push(`\nALT\n${thumb.alt}`);
+  if (thumb.verify)  lines.push(`\nVERIFY\n${thumb.verify}`);
+  if (thumb.overlay) {
+    const ov = thumb.overlay;
+    lines.push(`\nOVERLAY TEXT\n${ov.text || ""}`);
+    if (ov.placement) lines.push(`Placement: ${ov.placement}`);
+    if (ov.size)      lines.push(`Size: ${ov.size}`);
+    if (ov.weight)    lines.push(`Weight: ${ov.weight}`);
+    if (ov.color)     lines.push(`Color: ${ov.color}`);
+    if (ov.treatment) lines.push(`Treatment: ${ov.treatment}`);
+  }
+  return lines.join("\n");
+}
+
+function sbThumbCopyPrompt(thumb) {
+  let text = thumb.prompt || "";
+  if (thumb.avoid) text += `\n\nAVOID: ${thumb.avoid}`;
+  return text;
+}
+
+/* ---- HTML builders ---- */
+
+function sbField(label, text, extraClass = "") {
+  if (!text) return "";
+  return `<div class="sb-field">
+    <div class="sb-field-label">${escapeHTML(label)}</div>
+    <div class="sb-field-text${extraClass ? " " + extraClass : ""}">${escapeHTML(text)}</div>
+  </div>`;
+}
+
+function buildSBImageCardHTML(img, pairN) {
+  const id = img.id || `IMAGE-${pairN}`;
+  const refLabel = img.ref ? `With Ref — ${img.ref}` : "Without Ref";
+  const refClass = img.ref ? "sb-ref-yes" : "sb-ref-no";
+
+  const fullKey   = sbRegister(sbImageCopyFull(img));
+  const promptKey = sbRegister(sbImageCopyPrompt(img));
+
+  return `<div class="sb-img-card">
+    <div class="sb-img-header">
+      <span class="sb-img-id">${escapeHTML(id)}</span>
+      ${img.style ? `<span class="sb-badge sb-style-badge">Style ${escapeHTML(img.style)}</span>` : ""}
+      <span class="sb-badge ${refClass}">${escapeHTML(refLabel)}</span>
+      ${img.timecode ? `<span class="sb-img-timecode">${escapeHTML(img.timecode)}</span>` : ""}
+    </div>
+    ${sbField("Subject", img.subject)}
+    ${sbField("Env", img.env)}
+    ${sbField("Camera", img.camera)}
+    ${sbField("Prompt", img.prompt, "sb-prompt")}
+    ${sbField("Avoid", img.avoid, "sb-avoid")}
+    ${sbField("File", img.file, "sb-file")}
+    ${sbField("Alt", img.alt)}
+    <div class="sb-card-actions">
+      <button class="btn-mini btn-primary" data-sbcopy="${promptKey}" data-label="Copy Prompt">Copy Prompt</button>
+      <button class="btn-mini" data-sbcopy="${fullKey}" data-label="Copy Full Block">Copy Full Block</button>
+    </div>
+  </div>`;
+}
+
+function buildSBAnimCardHTML(anim, imgId, pairN) {
+  const id = anim.id || `ANIM-${pairN}`;
+  const copyKey = sbRegister(sbAnimCopyText(anim, imgId));
+
+  return `<div class="sb-anim-card">
+    <div class="sb-anim-header">
+      <span class="sb-anim-id">${escapeHTML(id)}</span>
+      ${imgId ? `<span class="sb-anim-arrow">→</span><span class="sb-anim-src">${escapeHTML(imgId)}</span>` : ""}
+    </div>
+    <div class="sb-anim-instruction">${escapeHTML(anim.instruction || "")}</div>
+    <div class="sb-anim-actions">
+      <button class="btn-mini" data-sbcopy="${copyKey}" data-label="Copy Instruction">Copy Instruction</button>
+    </div>
+  </div>`;
+}
+
+function buildSBPairRowHTML(pair) {
+  const img  = pair.image || {};
+  const anim = pair.anim  || {};
+  return `<div class="sb-pair">
+    ${buildSBImageCardHTML(img, pair.n)}
+    ${buildSBAnimCardHTML(anim, img.id, pair.n)}
+  </div>`;
+}
+
+function buildSBSegmentHTML(seg, idx) {
+  const voKey = seg.voiceover ? sbRegister(seg.voiceover) : null;
+
+  let html = `<div class="sb-segment">
+    <div class="sb-segment-header">
+      <span class="sb-seg-num">Seg ${seg.segment || idx + 1}</span>
+      <span class="sb-segment-title">${escapeHTML(seg.name || "")}</span>
+      ${seg.timecode ? `<span class="sb-segment-timecode">${escapeHTML(seg.timecode)}</span>` : ""}
+    </div>`;
+
+  if (seg.voiceover) {
+    html += `<div class="sb-seg-vo-wrap">
+      <blockquote class="sb-voiceover">${escapeHTML(seg.voiceover)}</blockquote>
+      <button class="btn-mini btn-vo-copy" data-sbcopy="${voKey}" data-label="Copy VO">Copy VO</button>
+    </div>`;
+  }
+
+  html += `<div class="sb-pairs">`;
+  (seg.pairs || []).forEach(pair => { html += buildSBPairRowHTML(pair); });
+  html += `</div></div>`;
+  return html;
+}
+
+function buildSBThumbnailHTML(thumb) {
+  const refLabel = thumb.ref ? `With Ref — ${thumb.ref}` : "Without Ref";
+  const refClass = thumb.ref ? "sb-ref-yes" : "sb-ref-no";
+  const fullKey   = sbRegister(sbThumbCopyFull(thumb));
+  const promptKey = sbRegister(sbThumbCopyPrompt(thumb));
+
+  let html = `<div class="sb-thumbnail-section">
+    <div class="sb-thumbnail-label">Thumbnail</div>
+    <div class="sb-thumbnail-card">
+      <div class="sb-img-header">
+        <span class="sb-img-id">THUMBNAIL</span>
+        ${thumb.style ? `<span class="sb-badge sb-style-badge">Style ${escapeHTML(thumb.style)}</span>` : ""}
+        <span class="sb-badge ${refClass}">${escapeHTML(refLabel)}</span>
+      </div>
+      ${sbField("Subject", thumb.subject)}
+      ${sbField("Prompt", thumb.prompt, "sb-prompt")}
+      ${sbField("Avoid", thumb.avoid, "sb-avoid")}
+      ${sbField("File", thumb.file, "sb-file")}
+      ${sbField("Alt", thumb.alt)}
+      ${sbField("Verify", thumb.verify)}`;
+
+  if (thumb.overlay) {
+    const ov = thumb.overlay;
+    html += `<div class="sb-overlay-block">
+      <div class="sb-overlay-label">Text Overlay</div>
+      ${ov.text ? `<div class="sb-overlay-text">${escapeHTML(ov.text)}</div>` : ""}
+      ${sbField("Placement", ov.placement)}
+      ${sbField("Size", ov.size)}
+      ${sbField("Weight", ov.weight)}
+      ${sbField("Color", ov.color)}
+      ${sbField("Treatment", ov.treatment)}
+    </div>`;
+  }
+
+  html += `<div class="sb-card-actions">
+    <button class="btn-mini btn-primary" data-sbcopy="${promptKey}" data-label="Copy Prompt">Copy Prompt</button>
+    <button class="btn-mini" data-sbcopy="${fullKey}" data-label="Copy Full Block">Copy Full Block</button>
+  </div>
+  </div></div>`;
+  return html;
+}
+
+function renderStoryboard() {
+  const container = $("#sb-content");
+  if (!storyboardState) { container.style.display = "none"; return; }
+
+  // Reset copy registry before each render.
+  Object.keys(sbCopyRegistry).forEach(k => delete sbCopyRegistry[k]);
+  sbCopySeq = 0;
+
+  const s = storyboardState;
+  const meta = s.meta || {};
+
+  let html = "";
+
+  // Meta bar
+  if (meta.title || meta.project || meta.runtime) {
+    const parts = [];
+    if (meta.client)      parts.push(escapeHTML(meta.client));
+    if (meta.project)     parts.push(escapeHTML(meta.project));
+    if (meta.runtime)     parts.push(escapeHTML(meta.runtime));
+    if (meta.total_pairs) parts.push(`${meta.total_pairs} pairs`);
+    html += `<div class="sb-meta">
+      ${meta.title ? `<div class="sb-meta-title">${escapeHTML(meta.title)}</div>` : ""}
+      ${parts.length ? `<div class="sb-meta-sub">${parts.join(" · ")}</div>` : ""}
+    </div>`;
+  }
+
+  // Segments
+  (s.segments || []).forEach((seg, i) => { html += buildSBSegmentHTML(seg, i); });
+
+  // Thumbnail
+  if (s.thumbnail) html += buildSBThumbnailHTML(s.thumbnail);
+
+  container.innerHTML = html;
+  container.style.display = "";
+
+  // Wire copy buttons via delegation.
+  container.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-sbcopy]");
+    if (!btn) return;
+    const text = sbCopyRegistry[btn.dataset.sbcopy];
+    if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
+  });
+}
+
+/* ---- Tab switching ---- */
+
+function initTabs() {
+  $all(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.tab;
+      $all(".tab-btn").forEach(b => b.classList.toggle("tab-active", b.dataset.tab === target));
+      $("#deliverables-tab-content").style.display = target === "deliverables" ? "" : "none";
+      $("#storyboard-tab-content").style.display   = target === "storyboard"   ? "" : "none";
+    });
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);
