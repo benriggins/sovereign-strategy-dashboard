@@ -1346,3 +1346,76 @@ html, body {
   margin: 0;
   font-style: italic;
 }
+
+/* ============ BATCH EXPORT SECTION ============ */
+.sb-batch-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 32px;
+}
+.sb-batch-header {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sb-batch-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.sb-batch-sub {
+  font-size: 0.71rem;
+  color: var(--muted);
+}
+.sb-batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.sb-batch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s;
+}
+.sb-batch-row:hover { border-color: rgba(47,128,237,0.3); }
+.sb-batch-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.sb-batch-num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+  min-width: 52px;
+}
+.sb-batch-range {
+  font-size: 0.75rem;
+  color: var(--silver);
+  white-space: nowrap;
+}
+.sb-batch-ids {
+  font-size: 0.7rem;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sb-batch-count {
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.sb-batch-btn { flex-shrink: 0; }

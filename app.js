@@ -2151,6 +2151,66 @@ function buildSBThumbnailHTML(thumb) {
   return html;
 }
 
+function buildBatchExportHTML(segments) {
+  const SEP = "\n\n────────────────────────────────────────\n\n";
+  const BATCH_SIZE = 5;
+
+  // Flatten all pairs in order across all segments
+  const allPairs = [];
+  (segments || []).forEach(seg => {
+    (seg.pairs || []).forEach(pair => allPairs.push(pair));
+  });
+  if (!allPairs.length) return "";
+
+  // Slice into batches of 5
+  const batches = [];
+  for (let i = 0; i < allPairs.length; i += BATCH_SIZE) {
+    batches.push(allPairs.slice(i, i + BATCH_SIZE));
+  }
+
+  let rows = "";
+  batches.forEach((batch, bIdx) => {
+    const firstPair = batch[0];
+    const lastPair  = batch[batch.length - 1];
+    const firstN    = firstPair.n || (bIdx * BATCH_SIZE + 1);
+    const lastN     = lastPair.n  || (bIdx * BATCH_SIZE + batch.length);
+    const firstId   = (firstPair.image || {}).id || `IMAGE-${firstN}`;
+    const lastId    = (lastPair.image  || {}).id || `IMAGE-${lastN}`;
+    const pairRange = firstN === lastN ? `Pair ${firstN}` : `Pairs ${firstN}–${lastN}`;
+    const idRange   = firstId === lastId ? firstId : `${firstId} – ${lastId}`;
+
+    // Build copy text: IMAGE full block → SEP → ANIM instruction → SEP → next pair...
+    const parts = [];
+    batch.forEach((pair, pIdx) => {
+      if (pIdx > 0) parts.push(SEP);
+      const img  = pair.image || {};
+      const anim = pair.anim  || {};
+      parts.push(sbImageCopyFull(img));
+      parts.push(SEP);
+      parts.push(sbAnimCopyText(anim, img.id));
+    });
+    const copyKey = sbRegister(parts.join(""));
+
+    rows += `<div class="sb-batch-row">
+      <div class="sb-batch-info">
+        <span class="sb-batch-num">Batch ${bIdx + 1}</span>
+        <span class="sb-batch-range">${escapeHTML(pairRange)}</span>
+        <span class="sb-batch-ids">${escapeHTML(idRange)}</span>
+        <span class="sb-batch-count">${batch.length} pairs · ${batch.length * 2} cards</span>
+      </div>
+      <button class="btn-mini btn-primary sb-batch-btn" data-sbcopy="${copyKey}" data-label="Copied Batch ${bIdx + 1}">Copy for Veo</button>
+    </div>`;
+  });
+
+  return `<div class="sb-batch-section">
+    <div class="sb-batch-header">
+      <div class="sb-batch-title">Batch Export for Veo</div>
+      <div class="sb-batch-sub">5 pairs · 10 cards per batch — full image blocks + animation instructions, line-separated</div>
+    </div>
+    <div class="sb-batch-list">${rows}</div>
+  </div>`;
+}
+
 function buildVOScriptHTML(segments) {
   const segsWithVO = segments.filter(s => s.voiceover);
   if (!segsWithVO.length) return "";
@@ -2207,6 +2267,9 @@ function renderStoryboard() {
       ${parts.length ? `<div class="sb-meta-sub">${parts.join(" · ")}</div>` : ""}
     </div>`;
   }
+
+  // Batch export panel
+  html += buildBatchExportHTML(s.segments || []);
 
   // Segments
   (s.segments || []).forEach((seg, i) => { html += buildSBSegmentHTML(seg, i); });
