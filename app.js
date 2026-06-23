@@ -2151,6 +2151,37 @@ function buildSBThumbnailHTML(thumb) {
   return html;
 }
 
+function buildVOScriptHTML(segments) {
+  const segsWithVO = segments.filter(s => s.voiceover);
+  if (!segsWithVO.length) return "";
+
+  const scriptLines = [];
+  segsWithVO.forEach((seg, i) => {
+    const label = `[SEG ${seg.segment || i + 1} — ${(seg.name || "").toUpperCase()}${seg.timecode ? " | " + seg.timecode : ""}]`;
+    scriptLines.push(label);
+    scriptLines.push(seg.voiceover);
+    scriptLines.push("");
+  });
+  const fullText = scriptLines.join("\n").trim();
+  const copyKey = sbRegister(fullText);
+
+  let inner = "";
+  segsWithVO.forEach((seg, i) => {
+    inner += `<div class="sb-vo-seg-block">
+      <div class="sb-vo-seg-label">Seg ${seg.segment || i + 1} — ${escapeHTML(seg.name || "")}${seg.timecode ? `<span class="sb-vo-seg-time"> | ${escapeHTML(seg.timecode)}</span>` : ""}</div>
+      <p class="sb-vo-seg-text">${escapeHTML(seg.voiceover)}</p>
+    </div>`;
+  });
+
+  return `<div class="sb-vo-script-section">
+    <div class="sb-vo-script-header">
+      <div class="sb-vo-script-label">Full Voiceover Script</div>
+      <button class="btn-mini btn-primary" data-sbcopy="${copyKey}" data-label="Copy Full Script">Copy Full Script</button>
+    </div>
+    <div class="sb-vo-script-body">${inner}</div>
+  </div>`;
+}
+
 function renderStoryboard() {
   const container = $("#sb-content");
   if (!storyboardState) { container.style.display = "none"; return; }
@@ -2182,6 +2213,9 @@ function renderStoryboard() {
 
   // Thumbnail
   if (s.thumbnail) html += buildSBThumbnailHTML(s.thumbnail);
+
+  // Full voiceover script
+  html += buildVOScriptHTML(s.segments || []);
 
   container.innerHTML = html;
   container.style.display = "";
