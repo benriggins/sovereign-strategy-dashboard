@@ -39,6 +39,7 @@
     <nav class="tab-nav" role="tablist">
       <button class="tab-btn tab-active" data-tab="deliverables" role="tab">Deliverables</button>
       <button class="tab-btn" data-tab="storyboard" role="tab">Storyboard</button>
+      <button class="tab-btn" data-tab="flow" role="tab">Flow</button>
     </nav>
 
     <!-- ============ DELIVERABLES TAB ============ -->
@@ -169,6 +170,21 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
       </section>
       <div id="sb-content" class="sb-content" style="display:none;"></div>
     </div><!-- /#storyboard-tab-content -->
+
+    <!-- ============ FLOW TAB ============ -->
+    <div id="flow-tab-content" style="display:none;">
+      <section class="panel fl-import-panel">
+        <span class="panel-label">Paste Flow V1 Packet</span>
+        <p class="fl-import-desc">Paste a <code>BEGIN_SOVEREIGN_FLOW_V1</code> packet — the output of the Google Flow video production pipeline. Includes batched agent commands, clip-by-clip video prompts, TTS script, and thumbnail blueprint.</p>
+        <textarea id="fl-import-box" class="import-box fl-import-box"
+          placeholder="BEGIN_SOVEREIGN_FLOW_V1&#10;{ ... }&#10;END_SOVEREIGN_FLOW_V1"></textarea>
+        <div class="import-buttons">
+          <button id="btn-fl-import" class="btn btn-primary">Import Flow Packet</button>
+          <button id="btn-fl-clear" class="btn">Clear Flow</button>
+        </div>
+      </section>
+      <div id="fl-content" class="fl-content" style="display:none;"></div>
+    </div><!-- /#flow-tab-content -->
 
     <footer class="footer">
       <span>Sovereign Strategy Deliverables Dashboard — static, local, no backend.</span>

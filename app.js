@@ -1842,6 +1842,34 @@ function init() {
 
   $("#btn-sb-copy-prompt").addEventListener("click", (e) =>
     copyToClipboard(STORYBOARD_CONVERSION_PROMPT, e.currentTarget, "Copy Conversion Prompt"));
+
+  // Flow tab.
+  loadFlow();
+  renderFlow();
+
+  $("#btn-fl-import").addEventListener("click", () => {
+    const raw = $("#fl-import-box").value.trim();
+    if (!raw) { showMessage("Nothing to import.", "warn"); return; }
+    try {
+      flowState = parseFlowPacket(raw);
+      saveFlow();
+      renderFlow();
+      const clips = (flowState.batches || []).reduce((n, b) => n + (b.clips || []).length, 0);
+      const batches = (flowState.batches || []).length;
+      showMessage(`Flow packet imported: ${batches} batch${batches !== 1 ? "es" : ""}, ${clips} clip${clips !== 1 ? "s" : ""}.`, "success");
+    } catch(err) {
+      showMessage("Could not parse Flow packet — check the JSON format.", "error");
+    }
+  });
+
+  $("#btn-fl-clear").addEventListener("click", () => {
+    if (!confirm("Clear the Flow packet?")) return;
+    flowState = null;
+    try { localStorage.removeItem(FLOW_STORAGE_KEY); } catch(e) {}
+    $("#fl-import-box").value = "";
+    renderFlow();
+    showMessage("Flow packet cleared.", "info");
+  });
 }
 
 /* =========================================================================
@@ -2373,7 +2401,294 @@ function initTabs() {
       $all(".tab-btn").forEach(b => b.classList.toggle("tab-active", b.dataset.tab === target));
       $("#deliverables-tab-content").style.display = target === "deliverables" ? "" : "none";
       $("#storyboard-tab-content").style.display   = target === "storyboard"   ? "" : "none";
+      $("#flow-tab-content").style.display         = target === "flow"         ? "" : "none";
     });
+  });
+}
+
+/* =========================================================================
+ * SOVEREIGN_FLOW_V1 — Google Flow video production dashboard
+ * ========================================================================= */
+
+const FLOW_STORAGE_KEY = "sovereign_strategy_flow_v1";
+let flowState = null;
+
+const flowCopyRegistry = {};
+let flowCopySeq = 0;
+function flowRegister(text) {
+  const key = "flc_" + (++flowCopySeq);
+  flowCopyRegistry[key] = text;
+  return key;
+}
+
+function saveFlow() {
+  if (!flowState) return;
+  try { localStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(flowState)); } catch(e) {}
+}
+
+function loadFlow() {
+  try {
+    const raw = localStorage.getItem(FLOW_STORAGE_KEY);
+    if (raw) flowState = JSON.parse(raw);
+  } catch(e) {}
+}
+
+function parseFlowPacket(text) {
+  const t = text.trim();
+  const START = "BEGIN_SOVEREIGN_FLOW_V1";
+  const END   = "END_SOVEREIGN_FLOW_V1";
+  const si = t.indexOf(START);
+  const ei = t.indexOf(END);
+  const jsonStr = (si !== -1 && ei > si) ? t.slice(si + START.length, ei).trim() : t;
+  return JSON.parse(jsonStr);
+}
+
+/* ---- Flow HTML builders ---- */
+
+function flField(label, text, cls = "") {
+  if (!text) return "";
+  return `<div class="fl-thumb-field">
+    <div class="fl-th-label">${escapeHTML(label)}</div>
+    <div class="fl-th-text${cls ? " " + cls : ""}">${escapeHTML(text)}</div>
+  </div>`;
+}
+
+function buildFlowMetaBarHTML(meta) {
+  if (!meta) return "";
+  const chips = [
+    ["Client",   meta.client],
+    ["Project",  meta.project],
+    ["Title",    meta.title],
+    ["Runtime",  meta.runtime],
+    ["Clips",    meta.total_clips],
+    ["Batches",  meta.batch_count != null ? `${meta.batch_count} (${meta.batch_structure})` : null],
+    ["Engine",   meta.engine],
+  ].filter(([, v]) => v != null);
+  return `<div class="fl-meta-bar">${chips.map(([l, v]) =>
+    `<div class="fl-meta-chip"><span class="fl-meta-label">${escapeHTML(l)}</span><span class="fl-meta-value">${escapeHTML(String(v))}</span></div>`
+  ).join("")}</div>`;
+}
+
+function buildFlowSetupPanelHTML(ai) {
+  if (!ai) return "";
+
+  const gcKey = flowRegister(ai.global_constraints || "");
+  const gcBlock = ai.global_constraints ? `<div class="fl-setup-block">
+    <div class="fl-block-label">Paste into Flow Agent Settings → Agent Instructions</div>
+    <div class="fl-code-block-wrap">
+      <button class="fl-copy-btn fl-copy-btn-sm" data-flcopy="${gcKey}" data-label="Copy">Copy</button>
+      <pre class="fl-code-block">${escapeHTML(ai.global_constraints)}</pre>
+    </div>
+  </div>` : "";
+
+  let refRows = "";
+  (ai.reference_manifest || []).forEach(ref => {
+    const clipsHTML = (ref.clips_applied || []).map(n => `<span class="fl-clip-badge">${n}</span>`).join(" ");
+    const rKey = flowRegister(ref.integrity_rule || "");
+    refRows += `<tr>
+      <td class="fl-ref-product">${escapeHTML(ref.product)}</td>
+      <td class="fl-ref-file"><code>${escapeHTML(ref.file)}</code></td>
+      <td class="fl-ref-clips">${clipsHTML}</td>
+      <td><button class="fl-copy-btn fl-copy-btn-xs" data-flcopy="${rKey}" data-label="Copy Rule">Copy Rule</button></td>
+    </tr>`;
+  });
+  const refBlock = refRows ? `<div class="fl-setup-block">
+    <div class="fl-block-label">Reference Images — Upload as Ingredients</div>
+    <table class="fl-ref-table">
+      <thead><tr><th>Product</th><th>File</th><th>Clips</th><th></th></tr></thead>
+      <tbody>${refRows}</tbody>
+    </table>
+  </div>` : "";
+
+  const bcKey = flowRegister(ai.batch_continuity_rule || "");
+  const bcBlock = ai.batch_continuity_rule ? `<div class="fl-setup-block">
+    <div class="fl-block-label">Frame Lock Protocol</div>
+    <div class="fl-code-block-wrap">
+      <button class="fl-copy-btn fl-copy-btn-sm" data-flcopy="${bcKey}" data-label="Copy">Copy</button>
+      <pre class="fl-code-block">${escapeHTML(ai.batch_continuity_rule)}</pre>
+    </div>
+  </div>` : "";
+
+  return `<details class="fl-setup-panel">
+    <summary class="fl-setup-summary">
+      <span class="fl-setup-title">One-Time Agent Setup</span>
+      <span class="fl-setup-hint">Complete before pasting any batch command</span>
+    </summary>
+    <div class="fl-setup-callout">Complete this setup once before pasting any batch command. <strong>Global Constraints</strong> → paste into Flow Agent Settings. <strong>Reference images</strong> → upload to Flow project assets using exact filenames shown. <strong>TTS Script</strong> → paste into external TTS pipeline.</div>
+    ${gcBlock}${refBlock}${bcBlock}
+  </details>`;
+}
+
+function buildFlowTTSPanelHTML(tts) {
+  if (!tts || !tts.full_script) return "";
+  const copyKey = flowRegister(tts.full_script);
+  return `<div class="fl-tts-panel">
+    <div class="fl-panel-header">
+      <div>
+        <div class="fl-panel-title">Voiceover Script — Step 12b</div>
+        <div class="fl-panel-sub">Paste into External TTS Pipeline — Do NOT send to Flow Agent</div>
+      </div>
+      <button class="fl-copy-btn fl-copy-btn-lg" data-flcopy="${copyKey}" data-label="Copy Full Script">Copy Full Script</button>
+    </div>
+    <div class="fl-tts-script">${escapeHTML(tts.full_script)}</div>
+    <div class="fl-tts-note">This is audio-only. Google Flow never receives this.</div>
+  </div>`;
+}
+
+const FL_SCENE_CLASS = { OPEN: "fl-scene-open", CONTINUE: "fl-scene-continue", EVOLVE: "fl-scene-evolve", TRANSITION: "fl-scene-transition", CLOSE: "fl-scene-close" };
+
+function buildFlowVPBlockHTML(colorClass, labelText, text) {
+  if (!text) return "";
+  const k = flowRegister(text);
+  return `<div class="fl-vp-block ${colorClass}">
+    <div class="fl-vp-block-header">
+      <span class="fl-vp-label">${escapeHTML(labelText)}</span>
+      <button class="fl-copy-btn fl-copy-btn-xs" data-flcopy="${k}" data-label="Copy">Copy</button>
+    </div>
+    <div class="fl-vp-text">${escapeHTML(text)}</div>
+  </div>`;
+}
+
+function buildFlowClipCardHTML(clip) {
+  const vp = clip.video_prompt || {};
+  const sceneClass = FL_SCENE_CLASS[clip.scene_build] || "fl-scene-continue";
+  const refHTML = clip.ref ? `<div class="fl-ref-badge-wrap">
+    <span class="fl-ref-badge">REF: ${escapeHTML(clip.ref)}</span>
+    <span class="fl-ref-file-label">Ingredient: <code>${escapeHTML(clip.ref_file || "")}</code></span>
+  </div>` : "";
+
+  return `<div class="fl-clip-card">
+    <div class="fl-clip-left">
+      <div class="fl-clip-num">#${String(clip.n).padStart(2, "0")}</div>
+      <div class="fl-clip-timecode">${escapeHTML(clip.timecode || "")}</div>
+      <div class="fl-clip-segment">${escapeHTML(clip.segment || "")}</div>
+      <div class="fl-clip-badges">
+        <span class="fl-scene-badge ${sceneClass}">${escapeHTML(clip.scene_build || "")}</span>
+        ${clip.style ? `<span class="fl-style-badge">Style ${escapeHTML(clip.style)}</span>` : ""}
+      </div>
+      ${refHTML}
+      ${clip.voiceover ? `<div class="fl-clip-vo">
+        <div class="fl-vo-label">TTS Reference — Step 12b only. Not sent to Flow.</div>
+        <div class="fl-vo-text">${escapeHTML(clip.voiceover)}</div>
+      </div>` : ""}
+      ${clip.continuity ? `<div class="fl-clip-continuity">
+        <div class="fl-cont-label">Continuity</div>
+        <div class="fl-cont-text">${escapeHTML(clip.continuity)}</div>
+      </div>` : ""}
+    </div>
+    <div class="fl-clip-right">
+      <div class="fl-vp-header-note">Video Prompt — 5-Part Formula</div>
+      <div class="fl-vp-note">Reference only — agent_command above contains the assembled version.</div>
+      ${buildFlowVPBlockHTML("fl-vp-ingredient",     "Ingredient Role",        vp.ingredient_role)}
+      ${buildFlowVPBlockHTML("fl-vp-cinematography", "Cinematography",         vp.cinematography)}
+      ${buildFlowVPBlockHTML("fl-vp-subject",        "Subject & Action",       vp.subject_action)}
+      ${buildFlowVPBlockHTML("fl-vp-env",            "Environment & Lighting", vp.environment_lighting)}
+      ${buildFlowVPBlockHTML("fl-vp-constraints",    "Constraints",            vp.constraints)}
+    </div>
+  </div>`;
+}
+
+function buildFlowBatchPanelHTML(batch, totalBatches) {
+  const sourceHTML = batch.frame_lock_source
+    ? `<span class="fl-lock-pill fl-lock-orange">Start from: ${escapeHTML(batch.frame_lock_source)}</span>`
+    : `<span class="fl-lock-pill fl-lock-gray">Opening batch — no prior frame</span>`;
+  const exportHTML = batch.frame_lock_export
+    ? `<span class="fl-lock-pill fl-lock-blue">After completion: extract final frame → save as ${escapeHTML(batch.frame_lock_export)}</span>`
+    : `<span class="fl-lock-pill fl-lock-gray">Final batch — no export needed</span>`;
+
+  const cmdKey = flowRegister(batch.agent_command || "");
+  const clipsHTML = (batch.clips || []).map(c => buildFlowClipCardHTML(c)).join("");
+
+  return `<div class="fl-batch-card">
+    <div class="fl-zone-a">
+      <div class="fl-zone-a-header">
+        <div>
+          <div class="fl-batch-title">BATCH ${batch.batch} OF ${totalBatches} — Clips ${escapeHTML(batch.clip_range || "")}</div>
+          <div class="fl-batch-sub">Paste this entire block into Google Flow Agent</div>
+        </div>
+        <button class="fl-copy-btn fl-copy-btn-hero" data-flcopy="${cmdKey}" data-label="Copy Full Agent Command for Batch ${batch.batch}">Copy Full Agent Command for Batch ${batch.batch}</button>
+      </div>
+      <div class="fl-lock-row">${sourceHTML}${exportHTML}</div>
+      <pre class="fl-agent-command">${escapeHTML(batch.agent_command || "")}</pre>
+    </div>
+    <details class="fl-zone-b">
+      <summary class="fl-zone-b-summary">Clip Reference Cards — for review only. Agent Command above contains everything the agent needs.</summary>
+      <div class="fl-clips-list">${clipsHTML}</div>
+    </details>
+  </div>`;
+}
+
+function buildFlowThumbnailPanelHTML(thumb) {
+  if (!thumb) return "";
+  const promptKey = flowRegister(thumb.prompt || "");
+  const ov = thumb.overlay || {};
+  const refHTML = thumb.ref ? `<div class="fl-thumb-ref">
+    <span class="fl-ref-badge">REF: ${escapeHTML(thumb.ref)}</span>
+    <span class="fl-ref-file-label">Ingredient: <code>${escapeHTML(thumb.ref_file || "")}</code></span>
+  </div>` : "";
+
+  return `<div class="fl-thumb-panel">
+    <div class="fl-panel-header">
+      <div class="fl-panel-title">Thumbnail Blueprint</div>
+      ${thumb.style ? `<span class="fl-style-badge">Style ${escapeHTML(thumb.style)}</span>` : ""}
+    </div>
+    ${refHTML}
+    <div class="fl-thumb-fields">
+      ${flField("Subject", thumb.subject)}
+      ${thumb.prompt ? `<div class="fl-thumb-field">
+        <div class="fl-th-label-row">
+          <span class="fl-th-label">Prompt</span>
+          <button class="fl-copy-btn fl-copy-btn-sm" data-flcopy="${promptKey}" data-label="Copy Prompt">Copy</button>
+        </div>
+        <div class="fl-th-prompt">${escapeHTML(thumb.prompt)}</div>
+      </div>` : ""}
+      ${thumb.avoid ? `<div class="fl-thumb-field"><div class="fl-th-label">Avoid</div><div class="fl-th-avoid">${escapeHTML(thumb.avoid)}</div></div>` : ""}
+      ${thumb.file  ? `<div class="fl-thumb-field"><div class="fl-th-label">File</div><code class="fl-th-file">${escapeHTML(thumb.file)}</code></div>` : ""}
+      ${flField("Alt Text", thumb.alt)}
+    </div>
+    ${ov.text ? `<div class="fl-thumb-overlay-wrap">
+      <div class="fl-overlay-mock"><span class="fl-overlay-text">${escapeHTML(ov.text)}</span></div>
+      <div class="fl-overlay-specs">
+        ${ov.placement ? `<div><span class="fl-ov-label">Placement:</span> ${escapeHTML(ov.placement)}</div>` : ""}
+        ${ov.size      ? `<div><span class="fl-ov-label">Size:</span> ${escapeHTML(ov.size)}</div>` : ""}
+        ${ov.weight    ? `<div><span class="fl-ov-label">Weight:</span> ${escapeHTML(ov.weight)}</div>` : ""}
+        ${ov.color     ? `<div><span class="fl-ov-label">Color:</span> ${escapeHTML(ov.color)}</div>` : ""}
+        ${ov.treatment ? `<div><span class="fl-ov-label">Treatment:</span> ${escapeHTML(ov.treatment)}</div>` : ""}
+      </div>
+    </div>` : ""}
+    ${thumb.verify ? `<div class="fl-verify-callout">${escapeHTML(thumb.verify)}</div>` : ""}
+  </div>`;
+}
+
+function renderFlow() {
+  Object.keys(flowCopyRegistry).forEach(k => delete flowCopyRegistry[k]);
+  flowCopySeq = 0;
+
+  const container = $("#fl-content");
+  if (!container) return;
+
+  if (!flowState) {
+    container.style.display = "none";
+    container.innerHTML = "";
+    return;
+  }
+
+  const s = flowState;
+  const totalBatches = (s.batches || []).length;
+  let html = buildFlowMetaBarHTML(s.meta);
+  html += buildFlowSetupPanelHTML(s.agent_instructions);
+  html += buildFlowTTSPanelHTML(s.tts_script);
+  (s.batches || []).forEach(b => { html += buildFlowBatchPanelHTML(b, totalBatches); });
+  html += buildFlowThumbnailPanelHTML(s.thumbnail);
+
+  container.innerHTML = html;
+  container.style.display = "";
+
+  container.addEventListener("click", e => {
+    const btn = e.target.closest("[data-flcopy]");
+    if (!btn) return;
+    const text = flowCopyRegistry[btn.dataset.flcopy];
+    if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
   });
 }
 
