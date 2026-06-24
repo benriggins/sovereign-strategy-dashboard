@@ -2500,11 +2500,13 @@ function buildFlowSetupPanelHTML(ai) {
   }
   const hasSubBlocks = ai.global_bans || ai.blueprint_rule || ai.camera_package || ai.continuity_law;
   const subBlocksHTML = hasSubBlocks ? `<div class="fl-setup-block">
-    <div class="fl-block-label">Component Sub-Blocks — Reference Only</div>
-    ${subBlock("Global Bans", ai.global_bans)}
-    ${subBlock("Blueprint Rule", ai.blueprint_rule)}
-    ${subBlock("Camera Package", ai.camera_package)}
-    ${subBlock("Continuity Law", ai.continuity_law)}
+    <details class="fl-sub-blocks-details">
+      <summary class="fl-sub-blocks-summary">Component Sub-Blocks — Reference Only</summary>
+      ${subBlock("Global Bans", ai.global_bans)}
+      ${subBlock("Blueprint Rule", ai.blueprint_rule)}
+      ${subBlock("Camera Package", ai.camera_package)}
+      ${subBlock("Continuity Law", ai.continuity_law)}
+    </details>
   </div>` : "";
 
   // Reference manifest table
@@ -2553,7 +2555,8 @@ function buildFlowTTSPanelHTML(tts) {
   </div>`;
 }
 
-const FL_SCENE_CLASS = { OPEN: "fl-scene-open", CONTINUE: "fl-scene-continue", EVOLVE: "fl-scene-evolve", TRANSITION: "fl-scene-transition", CLOSE: "fl-scene-close" };
+const FL_SCENE_CLASS = { OPEN: "fl-scene-open", CONTINUE: "fl-scene-continue", EVOLVE: "fl-scene-evolve", TRANSITION: "fl-scene-transition", CLOSE: "fl-scene-close", MATCH_CUT: "fl-scene-match-cut" };
+const FL_SCALE_CLASS = { MACRO: "fl-scale-macro", HERO: "fl-scale-hero", SYSTEM: "fl-scale-system", BROLL: "fl-scale-broll" };
 
 function buildFlowVPBlockHTML(colorClass, labelText, text) {
   if (!text) return "";
@@ -2570,7 +2573,11 @@ function buildFlowVPBlockHTML(colorClass, labelText, text) {
 function buildFlowClipCardHTML(clip) {
   const vp = clip.video_prompt || {};
   const sceneClass = FL_SCENE_CLASS[clip.scene_build] || "fl-scene-continue";
-  const refHTML = clip.ref ? `<div class="fl-ref-badge-wrap">
+  const scaleTier = (clip.scale_tier || "").toUpperCase();
+  const scaleClass = FL_SCALE_CLASS[scaleTier] || "";
+  const isBroll = scaleTier === "BROLL";
+
+  const refHTML = (!isBroll && clip.ref) ? `<div class="fl-ref-badge-wrap">
     <span class="fl-ref-badge">REF: ${escapeHTML(clip.ref)}</span>
     <span class="fl-ref-file-label">Ingredient: <code>${escapeHTML(clip.ref_file || "")}</code></span>
   </div>` : "";
@@ -2582,8 +2589,10 @@ function buildFlowClipCardHTML(clip) {
       <div class="fl-clip-segment">${escapeHTML(clip.segment || "")}</div>
       <div class="fl-clip-badges">
         <span class="fl-scene-badge ${sceneClass}">${escapeHTML(clip.scene_build || "")}</span>
+        ${scaleTier && scaleClass ? `<span class="fl-scale-badge ${scaleClass}">${scaleTier}</span>` : ""}
         ${clip.style ? `<span class="fl-style-badge">Style ${escapeHTML(clip.style)}</span>` : ""}
       </div>
+      ${clip.environment_chapter ? `<div class="fl-env-chapter">Chapter: ${escapeHTML(clip.environment_chapter)}</div>` : ""}
       ${refHTML}
       ${clip.voiceover ? `<div class="fl-clip-vo">
         <div class="fl-vo-label">TTS Reference — Step 12b only. Not sent to Flow.</div>
@@ -2597,11 +2606,11 @@ function buildFlowClipCardHTML(clip) {
     <div class="fl-clip-right">
       <div class="fl-vp-header-note">Video Prompt — 5-Part Formula</div>
       <div class="fl-vp-note">Reference only — agent_command above contains the assembled version.</div>
-      ${buildFlowVPBlockHTML("fl-vp-ingredient",     "Ingredient Role",                  vp.ingredient_role)}
-      ${buildFlowVPBlockHTML("fl-vp-cinematography", "Cinematography Movement",          vp.cinematography_movement)}
-      ${buildFlowVPBlockHTML("fl-vp-subject",        "Subject & Action",                vp.subject_action)}
-      ${buildFlowVPBlockHTML("fl-vp-env",            "Environment & Lighting Specifics", vp.environment_lighting_specifics)}
-      ${buildFlowVPBlockHTML("fl-vp-constraints",    "Negative Space",                  vp.negative_space)}
+      ${buildFlowVPBlockHTML("fl-vp-ingredient",     "Ingredient Role",                    vp.ingredient_role)}
+      ${buildFlowVPBlockHTML("fl-vp-cinematography", "Camera Movement",                    vp.cinematography_movement)}
+      ${buildFlowVPBlockHTML("fl-vp-subject",        "Subject & Action",                   vp.subject_action)}
+      ${buildFlowVPBlockHTML("fl-vp-env",            "Environment & Lighting (Specifics)", vp.environment_lighting_specifics)}
+      ${buildFlowVPBlockHTML("fl-vp-constraints",    "Negative Space",                     vp.negative_space)}
     </div>
   </div>`;
 }
