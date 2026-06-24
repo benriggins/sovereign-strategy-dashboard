@@ -2472,15 +2472,42 @@ function buildFlowMetaBarHTML(meta) {
 function buildFlowSetupPanelHTML(ai) {
   if (!ai) return "";
 
-  const gcKey = flowRegister(ai.global_constraints || "");
-  const gcBlock = ai.global_constraints ? `<div class="fl-setup-block">
-    <div class="fl-block-label">Paste into Flow Agent Settings → Agent Instructions</div>
-    <div class="fl-code-block-wrap">
-      <button class="fl-copy-btn fl-copy-btn-sm" data-flcopy="${gcKey}" data-label="Copy">Copy</button>
-      <pre class="fl-code-block">${escapeHTML(ai.global_constraints)}</pre>
+  // Deliverable 1 — Instructions Panel (full_panel = assembled copy-paste for Flow Agent Settings)
+  const fullPanelText = ai.full_panel || ai.global_constraints || "";
+  const fpKey = flowRegister(fullPanelText);
+  const instrBlock = fullPanelText ? `<div class="fl-setup-block fl-instructions-hero">
+    <div class="fl-instr-header">
+      <div>
+        <div class="fl-block-label">Flow Agent — Instructions Panel</div>
+        <div class="fl-instructions-sub">Paste once at the start of every session. Never repeat it in Chat.</div>
+      </div>
+      <button class="fl-copy-btn fl-copy-btn-hero" data-flcopy="${fpKey}" data-label="Copy Instructions Panel">Copy Instructions Panel</button>
     </div>
+    <pre class="fl-code-block fl-code-block-nopad">${escapeHTML(fullPanelText)}</pre>
   </div>` : "";
 
+  // Component sub-blocks (reference only — these are the parts that compose full_panel)
+  function subBlock(label, text) {
+    if (!text) return "";
+    const k = flowRegister(text);
+    return `<div class="fl-sub-block">
+      <div class="fl-sub-block-label">${label}</div>
+      <div class="fl-code-block-wrap">
+        <button class="fl-copy-btn fl-copy-btn-xs" data-flcopy="${k}" data-label="Copy">Copy</button>
+        <pre class="fl-code-block">${escapeHTML(text)}</pre>
+      </div>
+    </div>`;
+  }
+  const hasSubBlocks = ai.global_bans || ai.blueprint_rule || ai.camera_package || ai.continuity_law;
+  const subBlocksHTML = hasSubBlocks ? `<div class="fl-setup-block">
+    <div class="fl-block-label">Component Sub-Blocks — Reference Only</div>
+    ${subBlock("Global Bans", ai.global_bans)}
+    ${subBlock("Blueprint Rule", ai.blueprint_rule)}
+    ${subBlock("Camera Package", ai.camera_package)}
+    ${subBlock("Continuity Law", ai.continuity_law)}
+  </div>` : "";
+
+  // Reference manifest table
   let refRows = "";
   (ai.reference_manifest || []).forEach(ref => {
     const clipsHTML = (ref.clips_applied || []).map(n => `<span class="fl-clip-badge">${n}</span>`).join(" ");
@@ -2500,22 +2527,13 @@ function buildFlowSetupPanelHTML(ai) {
     </table>
   </div>` : "";
 
-  const bcKey = flowRegister(ai.batch_continuity_rule || "");
-  const bcBlock = ai.batch_continuity_rule ? `<div class="fl-setup-block">
-    <div class="fl-block-label">Frame Lock Protocol</div>
-    <div class="fl-code-block-wrap">
-      <button class="fl-copy-btn fl-copy-btn-sm" data-flcopy="${bcKey}" data-label="Copy">Copy</button>
-      <pre class="fl-code-block">${escapeHTML(ai.batch_continuity_rule)}</pre>
-    </div>
-  </div>` : "";
-
   return `<details class="fl-setup-panel">
     <summary class="fl-setup-summary">
       <span class="fl-setup-title">One-Time Agent Setup</span>
       <span class="fl-setup-hint">Complete before pasting any batch command</span>
     </summary>
-    <div class="fl-setup-callout">Complete this setup once before pasting any batch command. <strong>Global Constraints</strong> → paste into Flow Agent Settings. <strong>Reference images</strong> → upload to Flow project assets using exact filenames shown. <strong>TTS Script</strong> → paste into external TTS pipeline.</div>
-    ${gcBlock}${refBlock}${bcBlock}
+    <div class="fl-setup-callout"><strong>Instructions Panel</strong> → paste once into Flow Agent Settings at session start, never again. <strong>Reference images</strong> → upload as Ingredients using exact filenames shown. <strong>TTS Script</strong> → paste into external TTS pipeline only.</div>
+    ${instrBlock}${subBlocksHTML}${refBlock}
   </details>`;
 }
 
@@ -2579,11 +2597,11 @@ function buildFlowClipCardHTML(clip) {
     <div class="fl-clip-right">
       <div class="fl-vp-header-note">Video Prompt — 5-Part Formula</div>
       <div class="fl-vp-note">Reference only — agent_command above contains the assembled version.</div>
-      ${buildFlowVPBlockHTML("fl-vp-ingredient",     "Ingredient Role",        vp.ingredient_role)}
-      ${buildFlowVPBlockHTML("fl-vp-cinematography", "Cinematography",         vp.cinematography)}
-      ${buildFlowVPBlockHTML("fl-vp-subject",        "Subject & Action",       vp.subject_action)}
-      ${buildFlowVPBlockHTML("fl-vp-env",            "Environment & Lighting", vp.environment_lighting)}
-      ${buildFlowVPBlockHTML("fl-vp-constraints",    "Constraints",            vp.constraints)}
+      ${buildFlowVPBlockHTML("fl-vp-ingredient",     "Ingredient Role",                  vp.ingredient_role)}
+      ${buildFlowVPBlockHTML("fl-vp-cinematography", "Cinematography Movement",          vp.cinematography_movement)}
+      ${buildFlowVPBlockHTML("fl-vp-subject",        "Subject & Action",                vp.subject_action)}
+      ${buildFlowVPBlockHTML("fl-vp-env",            "Environment & Lighting Specifics", vp.environment_lighting_specifics)}
+      ${buildFlowVPBlockHTML("fl-vp-constraints",    "Negative Space",                  vp.negative_space)}
     </div>
   </div>`;
 }
@@ -2603,10 +2621,10 @@ function buildFlowBatchPanelHTML(batch, totalBatches) {
     <div class="fl-zone-a">
       <div class="fl-zone-a-header">
         <div>
-          <div class="fl-batch-title">BATCH ${batch.batch} OF ${totalBatches} — Clips ${escapeHTML(batch.clip_range || "")}</div>
-          <div class="fl-batch-sub">Paste this entire block into Google Flow Agent</div>
+          <div class="fl-batch-title">Flow Agent — Chat Prompt / Batch ${batch.batch} of ${totalBatches}</div>
+          <div class="fl-batch-sub">Paste into Agent Chat for this batch. Do not repeat Instructions content here.</div>
         </div>
-        <button class="fl-copy-btn fl-copy-btn-hero" data-flcopy="${cmdKey}" data-label="Copy Full Agent Command for Batch ${batch.batch}">Copy Full Agent Command for Batch ${batch.batch}</button>
+        <button class="fl-copy-btn fl-copy-btn-hero" data-flcopy="${cmdKey}" data-label="Copy Chat Prompt — Batch ${batch.batch}">Copy Chat Prompt — Batch ${batch.batch}</button>
       </div>
       <div class="fl-lock-row">${sourceHTML}${exportHTML}</div>
       <pre class="fl-agent-command">${escapeHTML(batch.agent_command || "")}</pre>

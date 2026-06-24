@@ -1624,6 +1624,39 @@ html, body {
   margin-bottom: 10px;
 }
 
+/* Instructions Panel hero block — Deliverable 1 */
+.fl-instructions-hero {
+  border-left: 3px solid #0B1829;
+  background: #fff;
+}
+.fl-instr-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.fl-instructions-sub {
+  font-size: 0.68rem;
+  color: #455A64;
+  margin-top: 3px;
+}
+.fl-code-block-nopad {
+  padding-right: 14px !important;
+}
+
+/* Component sub-blocks */
+.fl-sub-block { margin-bottom: 12px; }
+.fl-sub-block:last-child { margin-bottom: 0; }
+.fl-sub-block-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #B0BEC5;
+  margin-bottom: 5px;
+}
+
 /* Code blocks */
 .fl-code-block-wrap { position: relative; }
 .fl-code-block-wrap .fl-copy-btn {
