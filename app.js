@@ -2067,13 +2067,56 @@ function sbField(label, text, extraClass = "") {
   </div>`;
 }
 
+function buildSBVPBlockHTML(colorClass, labelText, text, refBadge) {
+  if (!text) return "";
+  const copyKey = sbRegister(text);
+  const refBadgeHTML = refBadge ? `<span class="sb-vp-ref-badge">${escapeHTML(refBadge)}</span>` : "";
+  return `<div class="sb-vp-block ${colorClass}">
+    <div class="sb-vp-block-header">
+      <div><span class="sb-vp-label">${escapeHTML(labelText)}</span>${refBadgeHTML}</div>
+      <button class="btn-mini" data-sbcopy="${copyKey}" data-label="Copy">Copy</button>
+    </div>
+    <div class="sb-vp-text">${escapeHTML(text)}</div>
+  </div>`;
+}
+
+function buildSBVideoPromptColHTML(img) {
+  const vp = img.video_prompt;
+  if (!vp || typeof vp !== "object") return "";
+  const flowKey = sbRegister(sbImageCopyFlow(img));
+  return `<div class="sb-img-prompt-col">
+    <button class="sb-copy-flow-btn" data-sbcopy="${flowKey}" data-label="Copy Full Prompt for Flow Agent">Copy Full Prompt for Flow Agent</button>
+    ${buildSBVPBlockHTML("sb-vp-ingredient",    "Image Ingredient Role",   vp.ingredient_role,      img.ref || null)}
+    ${buildSBVPBlockHTML("sb-vp-cinematography","Cinematography",          vp.cinematography,       null)}
+    ${buildSBVPBlockHTML("sb-vp-subject",       "Subject & Action",        vp.subject_action,       null)}
+    ${buildSBVPBlockHTML("sb-vp-env",           "Environment & Lighting",  vp.environment_lighting, null)}
+    ${buildSBVPBlockHTML("sb-vp-constraints",   "Constraints",             vp.constraints,          null)}
+  </div>`;
+}
+
 function buildSBImageCardHTML(img, pairN) {
   const id = img.id || `IMAGE-${pairN}`;
   const refLabel = img.ref ? `With Ref — ${img.ref}` : "Without Ref";
   const refClass = img.ref ? "sb-ref-yes" : "sb-ref-no";
 
-  const fullKey   = sbRegister(sbImageCopyFull(img));
-  const promptKey = sbRegister(sbImageCopyPrompt(img));
+  const fullKey = sbRegister(sbImageCopyFull(img));
+  const flowKey = sbRegister(sbImageCopyFlow(img));
+
+  const hasVP = img.video_prompt && typeof img.video_prompt === "object";
+
+  const metaCol = `<div class="sb-img-meta-col">
+    ${sbField("Subject", img.subject)}
+    ${sbField("Env", img.env)}
+    ${sbField("Camera", img.camera)}
+    ${!hasVP ? sbField("Prompt", img.prompt, "sb-prompt") : ""}
+    ${!hasVP && img.avoid ? sbField("Avoid", img.avoid, "sb-avoid") : ""}
+    ${sbField("File", img.file, "sb-file")}
+    ${sbField("Alt", img.alt)}
+  </div>`;
+
+  const body = hasVP
+    ? `<div class="sb-img-card-inner">${metaCol}${buildSBVideoPromptColHTML(img)}</div>`
+    : metaCol;
 
   return `<div class="sb-img-card">
     <div class="sb-img-header">
@@ -2082,15 +2125,9 @@ function buildSBImageCardHTML(img, pairN) {
       <span class="sb-badge ${refClass}">${escapeHTML(refLabel)}</span>
       ${img.timecode ? `<span class="sb-img-timecode">${escapeHTML(img.timecode)}</span>` : ""}
     </div>
-    ${sbField("Subject", img.subject)}
-    ${sbField("Env", img.env)}
-    ${sbField("Camera", img.camera)}
-    ${sbField("Prompt", img.prompt, "sb-prompt")}
-    ${sbField("Avoid", img.avoid, "sb-avoid")}
-    ${sbField("File", img.file, "sb-file")}
-    ${sbField("Alt", img.alt)}
+    ${body}
     <div class="sb-card-actions">
-      <button class="btn-mini btn-primary" data-sbcopy="${promptKey}" data-label="Copy Prompt">Copy Prompt</button>
+      <button class="btn-mini btn-primary" data-sbcopy="${flowKey}" data-label="Copy Flow Prompt">Copy Flow Prompt</button>
       <button class="btn-mini" data-sbcopy="${fullKey}" data-label="Copy Full Block">Copy Full Block</button>
     </div>
   </div>`;
@@ -2220,7 +2257,7 @@ function buildBatchExportHTML(segments) {
       if (pIdx > 0) parts.push(SEP);
       const img  = pair.image || {};
       const anim = pair.anim  || {};
-      parts.push(sbImageCopyFull(img));
+      parts.push(sbImageCopyFlow(img));
       parts.push(SEP);
       parts.push(sbAnimCopyText(anim, img.id));
     });
