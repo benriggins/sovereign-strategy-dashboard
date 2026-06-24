@@ -1850,7 +1850,7 @@ function init() {
 
 const STORYBOARD_STORAGE_KEY = "sovereign_strategy_storyboard_v1";
 
-const STORYBOARD_CONVERSION_PROMPT = `Convert the Step 12 YouTube Storyboard output I'm about to paste into the SOVEREIGN_STORYBOARD_V1 JSON format below. Preserve every field verbatim — do not summarize, shorten, or rewrite any prompt, instruction, subject, camera, env, avoid, file, or alt text. Every word must be copied exactly as written.
+const STORYBOARD_CONVERSION_PROMPT = `Convert the Step 12 YouTube Storyboard output I'm about to paste into the SOVEREIGN_STORYBOARD_V1 JSON format below. Preserve every field verbatim — do not summarize, shorten, or rewrite any instruction, subject, camera, env, file, or alt text. Every word must be copied exactly as written.
 
 Output ONLY the JSON wrapped in:
 BEGIN_SOVEREIGN_STORYBOARD_V1
@@ -1884,8 +1884,13 @@ JSON structure:
             "subject": "Verbatim subject line from the storyboard",
             "env": "Verbatim env line",
             "camera": "Verbatim camera line",
-            "prompt": "Verbatim full prompt text — every word",
-            "avoid": "Verbatim avoid line",
+            "video_prompt": {
+              "ingredient_role": "Verbatim INGREDIENT ROLE text — or null if WITHOUT REF",
+              "cinematography": "Verbatim CINEMATOGRAPHY instruction",
+              "subject_action": "Verbatim SUBJECT & ACTION instruction",
+              "environment_lighting": "Verbatim ENVIRONMENT & LIGHTING instruction",
+              "constraints": "Verbatim CONSTRAINTS instruction"
+            },
             "file": "exact-filename-as-listed.jpg",
             "alt": "Verbatim alt text"
           },
@@ -1922,6 +1927,8 @@ Field rules:
 • "ref" → null if WITHOUT REF; the product name string if WITH REF (e.g. "AXEON FSD", "AXEON FST")
 • "segment" → integer (1, 2, 3…)
 • "n" → pair index integer
+• "video_prompt.ingredient_role" → null if WITHOUT REF; verbatim ingredient role text if WITH REF
+• The 5 video_prompt fields map to the 5 numbered sections in the Step 12 output: Ingredient Role, Cinematography, Subject & Action, Environment & Lighting, Constraints
 • Every text field → verbatim from the source, nothing rewritten
 • No commentary, no explanation — output only the wrapped JSON packet`;
 
@@ -1975,17 +1982,45 @@ function sbImageCopyFull(img) {
   if (img.subject) lines.push(`\nSUBJECT\n${img.subject}`);
   if (img.env)     lines.push(`\nENV\n${img.env}`);
   if (img.camera)  lines.push(`\nCAMERA\n${img.camera}`);
-  if (img.prompt)  lines.push(`\nPROMPT\n${img.prompt}`);
-  if (img.avoid)   lines.push(`\nAVOID\n${img.avoid}`);
-  if (img.file)    lines.push(`\nFILE\n${img.file}`);
-  if (img.alt)     lines.push(`\nALT\n${img.alt}`);
+  const vp = img.video_prompt;
+  if (vp && typeof vp === "object") {
+    if (vp.ingredient_role)      lines.push(`\n[IMAGE INGREDIENT ROLE]\n${vp.ingredient_role}`);
+    if (vp.cinematography)       lines.push(`\n[CINEMATOGRAPHY]\n${vp.cinematography}`);
+    if (vp.subject_action)       lines.push(`\n[SUBJECT & ACTION]\n${vp.subject_action}`);
+    if (vp.environment_lighting) lines.push(`\n[ENVIRONMENT & LIGHTING]\n${vp.environment_lighting}`);
+    if (vp.constraints)          lines.push(`\n[CONSTRAINTS]\n${vp.constraints}`);
+  } else {
+    if (img.prompt) lines.push(`\nPROMPT\n${img.prompt}`);
+    if (img.avoid)  lines.push(`\nAVOID\n${img.avoid}`);
+  }
+  if (img.file) lines.push(`\nFILE\n${img.file}`);
+  if (img.alt)  lines.push(`\nALT\n${img.alt}`);
   return lines.join("\n");
 }
 
+function sbVPSection(label, text) {
+  if (!text) return "";
+  return `[${label}]: ${text}\n\n`;
+}
+
+function sbImageCopyFlow(img) {
+  const vp = img.video_prompt;
+  if (!vp || typeof vp !== "object") {
+    let text = img.prompt || "";
+    if (img.avoid) text += `\n\nAVOID: ${img.avoid}`;
+    return text;
+  }
+  let out = "";
+  out += sbVPSection("IMAGE INGREDIENT ROLE", vp.ingredient_role);
+  out += sbVPSection("CINEMATOGRAPHY", vp.cinematography);
+  out += sbVPSection("SUBJECT & ACTION", vp.subject_action);
+  out += sbVPSection("ENVIRONMENT & LIGHTING", vp.environment_lighting);
+  out += sbVPSection("CONSTRAINTS", vp.constraints);
+  return out.trimEnd();
+}
+
 function sbImageCopyPrompt(img) {
-  let text = img.prompt || "";
-  if (img.avoid) text += `\n\nAVOID: ${img.avoid}`;
-  return text;
+  return sbImageCopyFlow(img);
 }
 
 function sbAnimCopyText(anim, imgId) {
