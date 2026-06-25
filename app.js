@@ -1870,6 +1870,54 @@ function init() {
     renderFlow();
     showMessage("Flow packet cleared.", "info");
   });
+
+  // TTS Script standalone
+  loadFlowTTS();
+  renderFlowTTS();
+  $("#btn-fl-tts-import").addEventListener("click", () => {
+    const raw = $("#fl-tts-box").value.trim();
+    if (!raw) { showMessage("Nothing to import.", "warn"); return; }
+    try {
+      flowTTSState = JSON.parse(raw);
+      saveFlowTTS();
+      renderFlowTTS();
+      showMessage("TTS script imported.", "success");
+    } catch(err) {
+      showMessage("Could not parse TTS script — check the JSON format.", "error");
+    }
+  });
+  $("#btn-fl-tts-clear").addEventListener("click", () => {
+    if (!confirm("Clear TTS script?")) return;
+    flowTTSState = null;
+    try { localStorage.removeItem(FLOW_TTS_KEY); } catch(e) {}
+    $("#fl-tts-box").value = "";
+    renderFlowTTS();
+    showMessage("TTS script cleared.", "info");
+  });
+
+  // Title & Description standalone
+  loadFlowTitleDesc();
+  renderFlowTitleDesc();
+  $("#btn-fl-titledesc-import").addEventListener("click", () => {
+    const raw = $("#fl-titledesc-box").value.trim();
+    if (!raw) { showMessage("Nothing to import.", "warn"); return; }
+    try {
+      flowTitleDescState = JSON.parse(raw);
+      saveFlowTitleDesc();
+      renderFlowTitleDesc();
+      showMessage("Title & description imported.", "success");
+    } catch(err) {
+      showMessage("Could not parse title & description — check the JSON format.", "error");
+    }
+  });
+  $("#btn-fl-titledesc-clear").addEventListener("click", () => {
+    if (!confirm("Clear title & description?")) return;
+    flowTitleDescState = null;
+    try { localStorage.removeItem(FLOW_TITLEDESC_KEY); } catch(e) {}
+    $("#fl-titledesc-box").value = "";
+    renderFlowTitleDesc();
+    showMessage("Title & description cleared.", "info");
+  });
 }
 
 /* =========================================================================
@@ -2410,14 +2458,34 @@ function initTabs() {
  * SOVEREIGN_FLOW_V1 — Google Flow video production dashboard
  * ========================================================================= */
 
-const FLOW_STORAGE_KEY = "sovereign_strategy_flow_v1";
+const FLOW_STORAGE_KEY     = "sovereign_strategy_flow_v1";
+const FLOW_TTS_KEY         = "sovereign_strategy_flow_tts_v1";
+const FLOW_TITLEDESC_KEY   = "sovereign_strategy_flow_titledesc_v1";
 let flowState = null;
+let flowTTSState = null;
+let flowTitleDescState = null;
 
 const flowCopyRegistry = {};
 let flowCopySeq = 0;
 function flowRegister(text) {
   const key = "flc_" + (++flowCopySeq);
-  flowCopyRegistry[key] = text;
+  flowCopyRegistry[key] = String(text || "");
+  return key;
+}
+
+const flowTTSReg = {};
+let flowTTSSeq = 0;
+function flTTSReg(text) {
+  const key = "ftts_" + (++flowTTSSeq);
+  flowTTSReg[key] = String(text || "");
+  return key;
+}
+
+const flowMetaReg = {};
+let flowMetaSeq = 0;
+function flMetaReg(text) {
+  const key = "fmeta_" + (++flowMetaSeq);
+  flowMetaReg[key] = String(text || "");
   return key;
 }
 
@@ -2425,12 +2493,22 @@ function saveFlow() {
   if (!flowState) return;
   try { localStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(flowState)); } catch(e) {}
 }
-
 function loadFlow() {
-  try {
-    const raw = localStorage.getItem(FLOW_STORAGE_KEY);
-    if (raw) flowState = JSON.parse(raw);
-  } catch(e) {}
+  try { const r = localStorage.getItem(FLOW_STORAGE_KEY); if (r) flowState = JSON.parse(r); } catch(e) {}
+}
+function saveFlowTTS() {
+  if (!flowTTSState) return;
+  try { localStorage.setItem(FLOW_TTS_KEY, JSON.stringify(flowTTSState)); } catch(e) {}
+}
+function loadFlowTTS() {
+  try { const r = localStorage.getItem(FLOW_TTS_KEY); if (r) flowTTSState = JSON.parse(r); } catch(e) {}
+}
+function saveFlowTitleDesc() {
+  if (!flowTitleDescState) return;
+  try { localStorage.setItem(FLOW_TITLEDESC_KEY, JSON.stringify(flowTitleDescState)); } catch(e) {}
+}
+function loadFlowTitleDesc() {
+  try { const r = localStorage.getItem(FLOW_TITLEDESC_KEY); if (r) flowTitleDescState = JSON.parse(r); } catch(e) {}
 }
 
 function parseFlowPacket(text) {
@@ -2486,8 +2564,22 @@ function buildFlowSetupPanelHTML(ai) {
     <pre class="fl-code-block fl-code-block-nopad">${escapeHTML(fullPanelText)}</pre>
   </div>` : "";
 
+  // Normalize a value that might be a string or an array to a display string
+  function normStr(val) {
+    if (!val) return "";
+    if (Array.isArray(val)) return val.map(s => `✗ ${s}`).join("\n");
+    return String(val);
+  }
+  // Normalize clips_applied which may be an array [1,2,3] or a string "1, 2, 3"
+  function normClips(val) {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    return String(val).split(",").map(s => s.trim()).filter(Boolean);
+  }
+
   // Component sub-blocks (reference only — these are the parts that compose full_panel)
-  function subBlock(label, text) {
+  function subBlock(label, rawVal) {
+    const text = normStr(rawVal);
     if (!text) return "";
     const k = flowRegister(text);
     return `<div class="fl-sub-block">
@@ -2512,7 +2604,7 @@ function buildFlowSetupPanelHTML(ai) {
   // Reference manifest table
   let refRows = "";
   (ai.reference_manifest || []).forEach(ref => {
-    const clipsHTML = (ref.clips_applied || []).map(n => `<span class="fl-clip-badge">${n}</span>`).join(" ");
+    const clipsHTML = normClips(ref.clips_applied).map(n => `<span class="fl-clip-badge">${escapeHTML(String(n))}</span>`).join(" ");
     const rKey = flowRegister(ref.integrity_rule || "");
     refRows += `<tr>
       <td class="fl-ref-product">${escapeHTML(ref.product)}</td>
@@ -2715,6 +2807,82 @@ function renderFlow() {
     const btn = e.target.closest("[data-flcopy]");
     if (!btn) return;
     const text = flowCopyRegistry[btn.dataset.flcopy];
+    if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
+  });
+}
+
+function renderFlowTTS() {
+  Object.keys(flowTTSReg).forEach(k => delete flowTTSReg[k]);
+  flowTTSSeq = 0;
+  const container = $("#fl-tts-content");
+  if (!container) return;
+  if (!flowTTSState) { container.style.display = "none"; container.innerHTML = ""; return; }
+  const tts = flowTTSState;
+  const scriptKey = flTTSReg(tts.full_script || "");
+  const instrBlock = tts.instructions ? (() => {
+    const k = flTTSReg(tts.instructions);
+    return `<div class="fl-tts-instr-block">
+      <div class="fl-tts-instr-header">
+        <span class="fl-tts-instr-label">TTS Instructions</span>
+        <button class="fl-copy-btn fl-copy-btn-xs" data-fltts="${k}" data-label="Copy Instructions">Copy Instructions</button>
+      </div>
+      <pre class="fl-code-block">${escapeHTML(tts.instructions)}</pre>
+    </div>`;
+  })() : "";
+  container.innerHTML = `<div class="fl-tts-panel fl-tts-standalone">
+    <div class="fl-panel-header">
+      <div>
+        <div class="fl-panel-title">Voiceover Script — Step 12b</div>
+        <div class="fl-panel-sub">Paste into External TTS Pipeline — Do NOT send to Flow Agent</div>
+      </div>
+      <button class="fl-copy-btn fl-copy-btn-lg" data-fltts="${scriptKey}" data-label="Copy Full Script">Copy Full Script</button>
+    </div>
+    ${instrBlock}
+    <div class="fl-tts-script">${escapeHTML(tts.full_script || "")}</div>
+    <div class="fl-tts-note">This is audio-only. Google Flow never receives this.</div>
+  </div>`;
+  container.style.display = "";
+  container.addEventListener("click", e => {
+    const btn = e.target.closest("[data-fltts]");
+    if (!btn) return;
+    const text = flowTTSReg[btn.dataset.fltts];
+    if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
+  });
+}
+
+function renderFlowTitleDesc() {
+  Object.keys(flowMetaReg).forEach(k => delete flowMetaReg[k]);
+  flowMetaSeq = 0;
+  const container = $("#fl-titledesc-content");
+  if (!container) return;
+  if (!flowTitleDescState) { container.style.display = "none"; container.innerHTML = ""; return; }
+  const td = flowTitleDescState;
+  function tdField(label, val) {
+    if (!val && val !== 0) return "";
+    const text = Array.isArray(val) ? val.join("\n") : String(val);
+    const k = flMetaReg(text);
+    return `<div class="fl-td-field">
+      <div class="fl-td-label-row">
+        <span class="fl-td-label">${escapeHTML(label)}</span>
+        <button class="fl-copy-btn fl-copy-btn-xs" data-flmeta="${k}" data-label="Copy">Copy</button>
+      </div>
+      <div class="fl-td-value">${escapeHTML(text)}</div>
+    </div>`;
+  }
+  container.innerHTML = `<div class="fl-titledesc-panel">
+    <div class="fl-panel-title fl-td-title">Title &amp; Description</div>
+    ${tdField("Video Title", td.video_title)}
+    ${tdField("YouTube Description", td.youtube_description)}
+    ${tdField("Chapters", td.chapters)}
+    ${tdField("Tags", td.tags)}
+    ${tdField("LinkedIn Caption", td.linkedin_caption)}
+    ${tdField("SEO Slug", td.seo_slug)}
+  </div>`;
+  container.style.display = "";
+  container.addEventListener("click", e => {
+    const btn = e.target.closest("[data-flmeta]");
+    if (!btn) return;
+    const text = flowMetaReg[btn.dataset.flmeta];
     if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
   });
 }

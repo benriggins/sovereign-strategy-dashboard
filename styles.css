@@ -1777,6 +1777,65 @@ html, body {
   font-style: italic;
   margin-top: 8px;
 }
+.fl-tts-instr-block {
+  margin-bottom: 12px;
+}
+.fl-tts-instr-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.fl-tts-instr-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #78909C;
+}
+
+/* Title & Description panel */
+.fl-titledesc-panel {
+  background: #fff;
+  border: 1px solid #CFD8DC;
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.fl-td-title {
+  margin-bottom: 4px;
+}
+.fl-td-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.fl-td-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.fl-td-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #78909C;
+}
+.fl-td-value {
+  background: #F4F6F8;
+  border: 1px solid #CFD8DC;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 0.78rem;
+  color: #0B1829;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* Batch card */
 .fl-batch-card {

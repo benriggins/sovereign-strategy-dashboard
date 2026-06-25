@@ -184,6 +184,30 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
         </div>
       </section>
       <div id="fl-content" class="fl-content" style="display:none;"></div>
+
+      <section class="panel fl-import-panel">
+        <span class="panel-label">Voiceover Script — Step 12b</span>
+        <p class="fl-import-desc">Paste the <code>tts_script</code> JSON from your outputter. Displays with copy buttons, separate from the main Flow packet.</p>
+        <textarea id="fl-tts-box" class="import-box fl-import-box"
+          placeholder='{&#10;  "instructions": "Voice: authoritative, measured. Pace: 130 WPM.",&#10;  "full_script": "Why is your filter cartridge..."&#10;}'></textarea>
+        <div class="import-buttons">
+          <button id="btn-fl-tts-import" class="btn btn-primary">Import TTS Script</button>
+          <button id="btn-fl-tts-clear" class="btn">Clear</button>
+        </div>
+      </section>
+      <div id="fl-tts-content" class="fl-content" style="display:none;"></div>
+
+      <section class="panel fl-import-panel">
+        <span class="panel-label">Title &amp; Description</span>
+        <p class="fl-import-desc">Paste the video metadata JSON from your outputter — title, YouTube description, chapters, tags, and LinkedIn caption.</p>
+        <textarea id="fl-titledesc-box" class="import-box fl-import-box"
+          placeholder='{&#10;  "video_title": "Your Filter Cartridge Is Not Failing...",&#10;  "youtube_description": "Full description...",&#10;  "chapters": "0:00 Introduction\n0:40 Peak Flow Sizing...",&#10;  "tags": ["cartridge filtration", "filter housing sizing"],&#10;  "linkedin_caption": "Optional LinkedIn caption.",&#10;  "seo_slug": "cartridge-filter-housing-sizing-libertyces"&#10;}'></textarea>
+        <div class="import-buttons">
+          <button id="btn-fl-titledesc-import" class="btn btn-primary">Import Title &amp; Description</button>
+          <button id="btn-fl-titledesc-clear" class="btn">Clear</button>
+        </div>
+      </section>
+      <div id="fl-titledesc-content" class="fl-content" style="display:none;"></div>
     </div><!-- /#flow-tab-content -->
 
     <footer class="footer">
