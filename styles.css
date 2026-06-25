@@ -1898,6 +1898,30 @@ html, body {
   overflow-y: auto;
 }
 
+.fl-clip-footer-block {
+  margin-top: 10px;
+  border: 1px solid #CFD8DC;
+  border-left: 4px solid #B0BEC5;
+  border-radius: 0 6px 6px 0;
+  background: #F4F6F8;
+  padding: 10px 14px;
+}
+.fl-clip-footer-label {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #78909C;
+  margin-bottom: 5px;
+}
+.fl-clip-footer-text {
+  margin: 0;
+  font-size: 0.68rem;
+  color: #546E7A;
+  line-height: 1.55;
+}
+
 /* Zone B — clip reference (collapsible) */
 .fl-zone-b-summary {
   list-style: none;

@@ -2649,6 +2649,7 @@ function buildFlowTTSPanelHTML(tts) {
 
 const FL_SCENE_CLASS = { OPEN: "fl-scene-open", CONTINUE: "fl-scene-continue", EVOLVE: "fl-scene-evolve", TRANSITION: "fl-scene-transition", CLOSE: "fl-scene-close", MATCH_CUT: "fl-scene-match-cut" };
 const FL_SCALE_CLASS = { MACRO: "fl-scale-macro", HERO: "fl-scale-hero", SYSTEM: "fl-scale-system", BROLL: "fl-scale-broll" };
+const FL_CLIP_FOOTER = "Reproduce exact geometry, stage count, port positions, and hardware. Zero alteration. Zero color specification. For the reference images main product — only in all clips that clearly state its meant to contain the reference image. For all clips that are not clear about using the reference, please do not use the reference image for that!";
 
 function buildFlowVPBlockHTML(colorClass, labelText, text) {
   if (!text) return "";
@@ -2715,7 +2716,8 @@ function buildFlowBatchPanelHTML(batch, totalBatches) {
     ? `<span class="fl-lock-pill fl-lock-blue">After completion: extract final frame → save as ${escapeHTML(batch.frame_lock_export)}</span>`
     : `<span class="fl-lock-pill fl-lock-gray">Final batch — no export needed</span>`;
 
-  const cmdKey = flowRegister(batch.agent_command || "");
+  const cmdText = (batch.agent_command || "") + "\n\n" + FL_CLIP_FOOTER;
+  const cmdKey = flowRegister(cmdText);
   const clipsHTML = (batch.clips || []).map(c => buildFlowClipCardHTML(c)).join("");
 
   return `<div class="fl-batch-card">
@@ -2729,6 +2731,10 @@ function buildFlowBatchPanelHTML(batch, totalBatches) {
       </div>
       <div class="fl-lock-row">${sourceHTML}${exportHTML}</div>
       <pre class="fl-agent-command">${escapeHTML(batch.agent_command || "")}</pre>
+      <div class="fl-clip-footer-block">
+        <span class="fl-clip-footer-label">LOCKED FOOTER — appended to every batch copy</span>
+        <p class="fl-clip-footer-text">${escapeHTML(FL_CLIP_FOOTER)}</p>
+      </div>
     </div>
     <details class="fl-zone-b">
       <summary class="fl-zone-b-summary">Clip Reference Cards — for review only. Agent Command above contains everything the agent needs.</summary>
