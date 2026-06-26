@@ -2974,6 +2974,56 @@ function buildTDThumbHTML(thumb, label) {
   </div>`;
 }
 
+function buildManusPrompt(td) {
+  const sga = td.seo_geo_aeo || {};
+  const lines = ["Run the YouTube Thumbnail Gen skill on the following.", ""];
+
+  if (sga.seo_focus && sga.seo_focus.length) {
+    lines.push("SEO FOCUS:");
+    (Array.isArray(sga.seo_focus) ? sga.seo_focus : [sga.seo_focus]).forEach(k => lines.push("- " + k));
+    lines.push("");
+  }
+  if (sga.geo_focus && sga.geo_focus.length) {
+    lines.push("GEO FOCUS:");
+    (Array.isArray(sga.geo_focus) ? sga.geo_focus : [sga.geo_focus]).forEach(k => lines.push("- " + k));
+    lines.push("");
+  }
+  if (sga.aeo_focus && sga.aeo_focus.length) {
+    lines.push("AEO FOCUS:");
+    (Array.isArray(sga.aeo_focus) ? sga.aeo_focus : [sga.aeo_focus]).forEach(k => lines.push("- " + k));
+    lines.push("");
+  }
+
+  if (td.title_a) { lines.push("TITLE A:"); lines.push(td.title_a); lines.push(""); }
+  if (td.title_b) { lines.push("TITLE B:"); lines.push(td.title_b); lines.push(""); }
+
+  function thumbLines(thumb, label) {
+    if (!thumb) return;
+    const ov = thumb.overlay || {};
+    lines.push(`${label}${thumb.style ? " — Style " + thumb.style : ""}:`);
+    if (thumb.ref)     lines.push(`REF: ${thumb.ref}${thumb.ref_file ? " | Ingredient: " + thumb.ref_file : ""}`);
+    if (thumb.subject) lines.push(`SUBJECT: ${thumb.subject}`);
+    if (thumb.prompt)  lines.push(`PROMPT: ${thumb.prompt}`);
+    if (thumb.avoid)   lines.push(`AVOID: ${thumb.avoid}`);
+    if (thumb.file)    lines.push(`FILE: ${thumb.file}`);
+    if (thumb.alt)     lines.push(`ALT TEXT: ${thumb.alt}`);
+    if (ov.text) {
+      lines.push(`OVERLAY TEXT: ${ov.text}`);
+      if (ov.placement) lines.push(`  Placement: ${ov.placement}`);
+      if (ov.size)      lines.push(`  Size: ${ov.size}`);
+      if (ov.weight)    lines.push(`  Weight: ${ov.weight}`);
+      if (ov.color)     lines.push(`  Color: ${ov.color}`);
+      if (ov.treatment) lines.push(`  Treatment: ${ov.treatment}`);
+    }
+    if (thumb.verify) lines.push(`VERIFY: ${thumb.verify}`);
+    lines.push("", FL_THUMB_FOOTER, "");
+  }
+  thumbLines(td.thumbnail_a, "THUMBNAIL A");
+  thumbLines(td.thumbnail_b, "THUMBNAIL B");
+
+  return lines.join("\n").trimEnd();
+}
+
 function renderFlowTitleDesc() {
   Object.keys(flowMetaReg).forEach(k => delete flowMetaReg[k]);
   flowMetaSeq = 0;
@@ -2981,6 +3031,10 @@ function renderFlowTitleDesc() {
   if (!container) return;
   if (!flowTitleDescState) { container.style.display = "none"; container.innerHTML = ""; return; }
   const td = flowTitleDescState;
+
+  const manusText = buildManusPrompt(td);
+  const manusKey  = flMetaReg(manusText);
+
   function tdField(label, val) {
     if (!val && val !== 0) return "";
     const text = Array.isArray(val) ? val.join("\n") : String(val);
@@ -3004,8 +3058,34 @@ function renderFlowTitleDesc() {
       <div class="fl-td-title-text">${escapeHTML(String(val))}</div>
     </div>`;
   }
+  function sgaBlock() {
+    const sga = td.seo_geo_aeo || {};
+    if (!sga.seo_focus && !sga.geo_focus && !sga.aeo_focus) return "";
+    function sgaList(label, items) {
+      if (!items || !items.length) return "";
+      const arr = Array.isArray(items) ? items : [items];
+      return `<div class="fl-sga-group">
+        <span class="fl-sga-label">${escapeHTML(label)}</span>
+        <ul class="fl-sga-list">${arr.map(i => `<li>${escapeHTML(i)}</li>`).join("")}</ul>
+      </div>`;
+    }
+    return `<div class="fl-sga-block">
+      <span class="fl-td-label" style="display:block;margin-bottom:8px;">SEO / GEO / AEO Context</span>
+      ${sgaList("SEO", sga.seo_focus)}
+      ${sgaList("GEO", sga.geo_focus)}
+      ${sgaList("AEO", sga.aeo_focus)}
+    </div>`;
+  }
+
   container.innerHTML = `<div class="fl-titledesc-panel">
-    <div class="fl-panel-title fl-td-title">Title &amp; Description</div>
+    <div class="fl-td-manus-header">
+      <div>
+        <div class="fl-panel-title fl-td-title">Title &amp; Description</div>
+        <div class="fl-batch-sub">Includes Manus trigger — copy below to run the YouTube Thumbnail Gen skill.</div>
+      </div>
+      <button class="fl-copy-btn fl-copy-btn-hero" data-flmeta="${manusKey}" data-label="Copy Manus Prompt">Copy Manus Prompt</button>
+    </div>
+    ${sgaBlock()}
     <div class="fl-td-titles-row">
       ${titleCard("Title A", td.title_a)}
       ${titleCard("Title B", td.title_b)}

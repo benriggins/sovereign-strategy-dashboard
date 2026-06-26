@@ -1805,6 +1805,42 @@ html, body {
   flex-direction: column;
   gap: 14px;
 }
+.fl-td-manus-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fl-sga-block {
+  border: 1px solid #CFD8DC;
+  border-left: 4px solid #0B1829;
+  border-radius: 0 6px 6px 0;
+  background: #F4F6F8;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fl-sga-group { display: flex; flex-direction: column; gap: 3px; }
+.fl-sga-label {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #546E7A;
+}
+.fl-sga-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fl-sga-list li {
+  font-size: 0.68rem;
+  color: #0B1829;
+  line-height: 1.5;
+}
 .fl-td-title {
   margin-bottom: 4px;
 }
