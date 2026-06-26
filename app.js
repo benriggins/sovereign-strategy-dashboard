@@ -2747,6 +2747,26 @@ function buildFlowThumbnailPanelHTML(thumb) {
   if (!thumb) return "";
   const promptKey = flowRegister(thumb.prompt || "");
   const ov = thumb.overlay || {};
+
+  // Full blueprint copy text
+  const lines = [`THUMBNAIL BLUEPRINT${thumb.style ? " — Style " + thumb.style : ""}`];
+  if (thumb.ref) lines.push(`REF: ${thumb.ref}${thumb.ref_file ? " | Ingredient: " + thumb.ref_file : ""}`);
+  if (thumb.subject) lines.push(`SUBJECT: ${thumb.subject}`);
+  if (thumb.prompt)  lines.push(`PROMPT: ${thumb.prompt}`);
+  if (thumb.avoid)   lines.push(`AVOID: ${thumb.avoid}`);
+  if (thumb.file)    lines.push(`FILE: ${thumb.file}`);
+  if (thumb.alt)     lines.push(`ALT TEXT: ${thumb.alt}`);
+  if (ov.text) {
+    lines.push("", `OVERLAY TEXT: ${ov.text}`);
+    if (ov.placement) lines.push(`  Placement: ${ov.placement}`);
+    if (ov.size)      lines.push(`  Size: ${ov.size}`);
+    if (ov.weight)    lines.push(`  Weight: ${ov.weight}`);
+    if (ov.color)     lines.push(`  Color: ${ov.color}`);
+    if (ov.treatment) lines.push(`  Treatment: ${ov.treatment}`);
+  }
+  if (thumb.verify) lines.push("", `VERIFY: ${thumb.verify}`);
+  const blueprintKey = flowRegister(lines.join("\n"));
+
   const refHTML = thumb.ref ? `<div class="fl-thumb-ref">
     <span class="fl-ref-badge">REF: ${escapeHTML(thumb.ref)}</span>
     <span class="fl-ref-file-label">Ingredient: <code>${escapeHTML(thumb.ref_file || "")}</code></span>
@@ -2755,7 +2775,10 @@ function buildFlowThumbnailPanelHTML(thumb) {
   return `<div class="fl-thumb-panel">
     <div class="fl-panel-header">
       <div class="fl-panel-title">Thumbnail Blueprint</div>
-      ${thumb.style ? `<span class="fl-style-badge">Style ${escapeHTML(thumb.style)}</span>` : ""}
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${thumb.style ? `<span class="fl-style-badge">Style ${escapeHTML(thumb.style)}</span>` : ""}
+        <button class="fl-copy-btn fl-copy-btn-sm" data-flcopy="${blueprintKey}" data-label="Copy Blueprint">Copy Blueprint</button>
+      </div>
     </div>
     ${refHTML}
     <div class="fl-thumb-fields">
