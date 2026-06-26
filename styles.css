@@ -1837,6 +1837,46 @@ html, body {
   word-break: break-word;
 }
 
+.fl-td-titles-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.fl-td-title-card {
+  border: 1px solid #CFD8DC;
+  border-left: 4px solid #1565C0;
+  border-radius: 0 8px 8px 0;
+  background: #F4F6F8;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fl-td-title-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.fl-td-title-card-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1565C0;
+}
+.fl-td-title-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0B1829;
+  line-height: 1.4;
+}
+.fl-td-thumb {
+  margin-top: 4px;
+}
+@media (max-width: 580px) {
+  .fl-td-titles-row { grid-template-columns: 1fr; }
+}
+
 /* Batch card */
 .fl-batch-card {
   background: #fff;

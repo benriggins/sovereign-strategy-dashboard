@@ -2847,7 +2847,7 @@ function renderFlow() {
   html += buildFlowSetupPanelHTML(s.agent_instructions);
   html += buildFlowTTSPanelHTML(s.tts_script);
   (s.batches || []).forEach(b => { html += buildFlowBatchPanelHTML(b, totalBatches); });
-  html += buildFlowThumbnailPanelHTML(s.thumbnail);
+  // thumbnail lives in Title & Description box (thumbnail_a / thumbnail_b) — not in SOVEREIGN_FLOW_V1
 
   container.innerHTML = html;
   container.style.display = "";
@@ -2899,6 +2899,81 @@ function renderFlowTTS() {
   });
 }
 
+function buildTDThumbHTML(thumb, label) {
+  if (!thumb) return "";
+  const ov = thumb.overlay || {};
+  const lines = [`${label}${thumb.style ? " — Style " + thumb.style : ""}`];
+  if (thumb.ref)     lines.push(`REF: ${thumb.ref}${thumb.ref_file ? " | Ingredient: " + thumb.ref_file : ""}`);
+  if (thumb.subject) lines.push(`SUBJECT: ${thumb.subject}`);
+  if (thumb.prompt)  lines.push(`PROMPT: ${thumb.prompt}`);
+  if (thumb.avoid)   lines.push(`AVOID: ${thumb.avoid}`);
+  if (thumb.file)    lines.push(`FILE: ${thumb.file}`);
+  if (thumb.alt)     lines.push(`ALT TEXT: ${thumb.alt}`);
+  if (ov.text) {
+    lines.push("", `OVERLAY TEXT: ${ov.text}`);
+    if (ov.placement) lines.push(`  Placement: ${ov.placement}`);
+    if (ov.size)      lines.push(`  Size: ${ov.size}`);
+    if (ov.weight)    lines.push(`  Weight: ${ov.weight}`);
+    if (ov.color)     lines.push(`  Color: ${ov.color}`);
+    if (ov.treatment) lines.push(`  Treatment: ${ov.treatment}`);
+  }
+  if (thumb.verify) lines.push("", `VERIFY: ${thumb.verify}`);
+  lines.push("", FL_THUMB_FOOTER);
+  const bpKey   = flMetaReg(lines.join("\n"));
+  const pKey    = thumb.prompt ? flMetaReg(thumb.prompt) : null;
+  const refHTML = thumb.ref ? `<div class="fl-thumb-ref">
+    <span class="fl-ref-badge">REF: ${escapeHTML(thumb.ref)}</span>
+    <span class="fl-ref-file-label">Ingredient: <code>${escapeHTML(thumb.ref_file || "")}</code></span>
+  </div>` : "";
+  function tf(lbl, val) {
+    if (!val) return "";
+    return `<div class="fl-thumb-field"><div class="fl-th-label">${escapeHTML(lbl)}</div><div class="fl-th-avoid">${escapeHTML(val)}</div></div>`;
+  }
+  return `<div class="fl-thumb-panel fl-td-thumb">
+    <div class="fl-panel-header">
+      <div class="fl-panel-title">${escapeHTML(label)}</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${thumb.style ? `<span class="fl-style-badge">Style ${escapeHTML(thumb.style)}</span>` : ""}
+        <button class="fl-copy-btn fl-copy-btn-sm" data-flmeta="${bpKey}" data-label="Copy Blueprint">Copy Blueprint</button>
+      </div>
+    </div>
+    ${refHTML}
+    <div class="fl-thumb-fields">
+      ${tf("Subject", thumb.subject)}
+      ${thumb.prompt ? `<div class="fl-thumb-field">
+        <div class="fl-th-label-row">
+          <span class="fl-th-label">Prompt</span>
+          <button class="fl-copy-btn fl-copy-btn-sm" data-flmeta="${pKey}" data-label="Copy Prompt">Copy</button>
+        </div>
+        <div class="fl-th-prompt">${escapeHTML(thumb.prompt)}</div>
+      </div>` : ""}
+      ${tf("Avoid", thumb.avoid)}
+      ${thumb.file ? `<div class="fl-thumb-field"><div class="fl-th-label">File</div><code class="fl-th-file">${escapeHTML(thumb.file)}</code></div>` : ""}
+      ${tf("Alt Text", thumb.alt)}
+    </div>
+    ${ov.text ? `<div class="fl-thumb-overlay-wrap">
+      <div class="fl-overlay-mock"><span class="fl-overlay-text">${escapeHTML(ov.text)}</span></div>
+      <div class="fl-overlay-specs">
+        ${ov.placement ? `<div><span class="fl-ov-label">Placement:</span> ${escapeHTML(ov.placement)}</div>` : ""}
+        ${ov.size      ? `<div><span class="fl-ov-label">Size:</span> ${escapeHTML(ov.size)}</div>` : ""}
+        ${ov.weight    ? `<div><span class="fl-ov-label">Weight:</span> ${escapeHTML(ov.weight)}</div>` : ""}
+        ${ov.color     ? `<div><span class="fl-ov-label">Color:</span> ${escapeHTML(ov.color)}</div>` : ""}
+        ${ov.treatment ? `<div><span class="fl-ov-label">Treatment:</span> ${escapeHTML(ov.treatment)}</div>` : ""}
+      </div>
+    </div>` : ""}
+    ${thumb.verify ? `<div class="fl-verify-callout">${escapeHTML(thumb.verify)}</div>` : ""}
+    <div class="fl-thumb-purple-cow">
+      <span class="fl-purple-cow-label">PURPLE COW PROTOCOL — appended to every blueprint copy</span>
+      <ol class="fl-purple-cow-steps">
+        <li><strong>Research first</strong> — identify top viral thumbnails in this exact niche. Analyze emotion, contrast, and the one unexpected element. Complete this before touching the generation tool.</li>
+        <li><strong>Design like an expert</strong> — high contrast, dark/moody environment, 1–2 bright focal points, rule of thirds, max 3 colors, dominant color that pops against YouTube's background.</li>
+        <li><strong>Photorealism only</strong> — no AI tells, no plastic surfaces, no studio floats, no clean white backgrounds. Real textures, real grit, real industrial lighting. If it looks generated, regenerate.</li>
+        <li><strong>Purple cow test</strong> — would someone stop mid-scroll before reading the title? If the title carries the image, it's not remarkable. Regenerate until the image alone stops the scroll.</li>
+      </ol>
+    </div>
+  </div>`;
+}
+
 function renderFlowTitleDesc() {
   Object.keys(flowMetaReg).forEach(k => delete flowMetaReg[k]);
   flowMetaSeq = 0;
@@ -2918,14 +2993,30 @@ function renderFlowTitleDesc() {
       <div class="fl-td-value">${escapeHTML(text)}</div>
     </div>`;
   }
+  function titleCard(label, val) {
+    if (!val) return "";
+    const k = flMetaReg(String(val));
+    return `<div class="fl-td-title-card">
+      <div class="fl-td-title-card-header">
+        <span class="fl-td-title-card-label">${escapeHTML(label)}</span>
+        <button class="fl-copy-btn fl-copy-btn-sm" data-flmeta="${k}" data-label="Copy ${label}">Copy ${label}</button>
+      </div>
+      <div class="fl-td-title-text">${escapeHTML(String(val))}</div>
+    </div>`;
+  }
   container.innerHTML = `<div class="fl-titledesc-panel">
     <div class="fl-panel-title fl-td-title">Title &amp; Description</div>
-    ${tdField("Video Title", td.video_title)}
+    <div class="fl-td-titles-row">
+      ${titleCard("Title A", td.title_a)}
+      ${titleCard("Title B", td.title_b)}
+    </div>
     ${tdField("YouTube Description", td.youtube_description)}
     ${tdField("Chapters", td.chapters)}
     ${tdField("Tags", td.tags)}
     ${tdField("LinkedIn Caption", td.linkedin_caption)}
     ${tdField("SEO Slug", td.seo_slug)}
+    ${buildTDThumbHTML(td.thumbnail_a, "Thumbnail A")}
+    ${buildTDThumbHTML(td.thumbnail_b, "Thumbnail B")}
   </div>`;
   container.style.display = "";
   container.addEventListener("click", e => {
