@@ -2189,6 +2189,38 @@ html, body {
   color: #0B1829;
   line-height: 1.55;
 }
+.fl-thumb-purple-cow {
+  margin-top: 14px;
+  border: 1px solid rgba(123,31,162,0.3);
+  border-left: 4px solid #7B1FA2;
+  border-radius: 0 8px 8px 0;
+  background: rgba(123,31,162,0.06);
+  padding: 12px 16px;
+}
+.fl-purple-cow-label {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #7B1FA2;
+  margin-bottom: 8px;
+}
+.fl-purple-cow-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.fl-purple-cow-steps li {
+  font-size: 0.68rem;
+  color: #4A148C;
+  line-height: 1.55;
+}
+.fl-purple-cow-steps li strong {
+  color: #6A1B9A;
+}
 
 @media (max-width: 580px) {
   .fl-clip-card { grid-template-columns: 1fr; }

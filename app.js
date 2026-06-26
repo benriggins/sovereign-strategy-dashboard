@@ -2650,6 +2650,16 @@ function buildFlowTTSPanelHTML(tts) {
 const FL_SCENE_CLASS = { OPEN: "fl-scene-open", CONTINUE: "fl-scene-continue", EVOLVE: "fl-scene-evolve", TRANSITION: "fl-scene-transition", CLOSE: "fl-scene-close", MATCH_CUT: "fl-scene-match-cut" };
 const FL_SCALE_CLASS = { MACRO: "fl-scale-macro", HERO: "fl-scale-hero", SYSTEM: "fl-scale-system", BROLL: "fl-scale-broll" };
 const FL_CLIP_FOOTER = "Reproduce exact geometry, stage count, port positions, and hardware. Zero alteration. Zero color specification. For the reference images main product — only in all clips that clearly state its meant to contain the reference image. For all clips that are not clear about using the reference, please do not use the reference image for that!";
+const FL_THUMB_FOOTER = `PURPLE COW PROTOCOL — Do NOT generate yet.
+
+STEP 1 — RESEARCH FIRST: Before touching the generation tool, identify the top viral thumbnails in this exact niche and topic. Analyze: what emotion does the first frame trigger? What color contrast grabs attention at 120px wide? What one unexpected element makes it remarkable? Complete this analysis in full before proceeding.
+
+STEP 2 — DESIGN LIKE A THUMBNAIL EXPERT: High contrast — typically a dark or moody environment with 1–2 bright focal points. Rule of thirds. Max 3 colors in the palette. Choose a dominant color that pops against YouTube's gray/white background. Use contrast, shadow, depth, and negative space intentionally. Think like a designer, not a prompt engineer.
+
+STEP 3 — PHOTOREALISM IS NON-NEGOTIABLE: No AI tells — no plastic surfaces, no perfect studio lighting, no floating products, no clean white backgrounds, no fake depth-of-field blur. Real textures. Real grit. Real industrial lighting with falloff and shadow. The product exists inside a real moment, not a render. If it looks like it was generated, regenerate it.
+
+STEP 4 — PURPLE COW TEST: Before finalizing, ask — would someone stop mid-scroll for this image before reading the title? If the title has to carry the image, it's not remarkable enough. Regenerate until the image alone stops the scroll.`;
+
 
 function buildFlowVPBlockHTML(colorClass, labelText, text) {
   if (!text) return "";
@@ -2765,6 +2775,7 @@ function buildFlowThumbnailPanelHTML(thumb) {
     if (ov.treatment) lines.push(`  Treatment: ${ov.treatment}`);
   }
   if (thumb.verify) lines.push("", `VERIFY: ${thumb.verify}`);
+  lines.push("", FL_THUMB_FOOTER);
   const blueprintKey = flowRegister(lines.join("\n"));
 
   const refHTML = thumb.ref ? `<div class="fl-thumb-ref">
@@ -2805,6 +2816,15 @@ function buildFlowThumbnailPanelHTML(thumb) {
       </div>
     </div>` : ""}
     ${thumb.verify ? `<div class="fl-verify-callout">${escapeHTML(thumb.verify)}</div>` : ""}
+    <div class="fl-thumb-purple-cow">
+      <span class="fl-purple-cow-label">PURPLE COW PROTOCOL — appended to every blueprint copy</span>
+      <ol class="fl-purple-cow-steps">
+        <li><strong>Research first</strong> — identify top viral thumbnails in this exact niche. Analyze emotion, contrast, and the one unexpected element. Complete this before touching the generation tool.</li>
+        <li><strong>Design like an expert</strong> — high contrast, dark/moody environment, 1–2 bright focal points, rule of thirds, max 3 colors, dominant color that pops against YouTube's background.</li>
+        <li><strong>Photorealism only</strong> — no AI tells, no plastic surfaces, no studio floats, no clean white backgrounds. Real textures, real grit, real industrial lighting. If it looks generated, regenerate.</li>
+        <li><strong>Purple cow test</strong> — would someone stop mid-scroll before reading the title? If the title carries the image, it's not remarkable. Regenerate until the image alone stops the scroll.</li>
+      </ol>
+    </div>
   </div>`;
 }
 
