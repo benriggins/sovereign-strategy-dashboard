@@ -2629,50 +2629,33 @@ function renderFlowShortForm() {
     return `<div class="fl-sf-meta-row"><span class="fl-sf-meta-label">${escapeHTML(label)}</span><span class="fl-sf-meta-val">${escapeHTML(String(text))}</span></div>`;
   }
 
-  function buildVideoHTML(v, label) {
+  function sfBlock(label, text) {
+    if (!text) return "";
+    const arr = Array.isArray(text) ? text.join("\n") : String(text);
+    const k = flSFReg(arr);
+    return `<div class="fl-sf-block">
+      <div class="fl-sf-block-header">
+        <span class="fl-sf-block-label">${escapeHTML(label)}</span>
+        <button class="fl-copy-btn fl-copy-btn-sm" data-flsf="${k}" data-label="Copy">Copy</button>
+      </div>
+      <textarea class="fl-sf-block-textarea" readonly>${escapeHTML(arr)}</textarea>
+    </div>`;
+  }
+
+  function buildVideoHTML(v, videoLabel) {
     if (!v) return "";
     const p = v.platforms || {};
     const ig = p.instagram || {};
     const yt = p.youtube_short || {};
     const li = p.linkedin || {};
 
-    const scenesHTML = (v.scene_directions || []).map(s => {
-      const parts = [
-        `<span class="fl-sf-clip-num">Clip ${s.clip}</span>`,
-        s.section    ? `<span class="fl-sf-section-badge">${escapeHTML(s.section)}</span>` : "",
-        s.seconds    ? `<span class="fl-sf-seconds">${escapeHTML(s.seconds)}s</span>` : "",
-        s.text_overlay ? `<span class="fl-sf-overlay-pill">Text: ${escapeHTML(s.text_overlay)}</span>` : "",
-        s.audio_sfx  ? `<span class="fl-sf-sfx-pill">SFX: ${escapeHTML(s.audio_sfx)}</span>` : "",
-      ].filter(Boolean).join(" ");
-
-      const promptK = s.omni_flash_prompt ? flSFReg(s.omni_flash_prompt) : null;
-      const refHTML = (s.ref && !s.ref.toLowerCase().includes("null")) ? `<span class="fl-ref-badge" style="margin-top:4px;">REF: ${escapeHTML(s.ref)}${s.ref_file ? ` — ${escapeHTML(s.ref_file)}` : ""}</span>` : "";
-
-      return `<div class="fl-sf-scene">
-        <div class="fl-sf-scene-header">${parts}</div>
-        ${s.omni_flash_prompt ? `<div class="fl-sf-scene-prompt-row">
-          <div class="fl-sf-scene-prompt">${escapeHTML(s.omni_flash_prompt)}</div>
-          <button class="fl-copy-btn fl-copy-btn-xs" data-flsf="${promptK}" data-label="Copy Prompt">Copy</button>
-        </div>` : ""}
-        ${refHTML}
-      </div>`;
-    }).join("");
-
     return `<div class="fl-sf-video-panel">
       <div class="fl-sf-video-header">
-        <div class="fl-panel-title">${escapeHTML(label)}</div>
+        <div class="fl-panel-title">${escapeHTML(videoLabel)}</div>
       </div>
-      <div class="fl-sf-meta-block">
-        ${sfMeta("Hook Type", v.hook_type)}
-        ${sfMeta("SEO Keyword", v.seo_keyword)}
-        ${sfMeta("CTA", v.cta)}
-        ${sfMeta("Concept", v.concept)}
-      </div>
-      ${sfCopy("Script", v.script)}
-      ${scenesHTML ? `<div class="fl-sf-scenes-block">
-        <div class="fl-sf-scenes-label">SCENE DIRECTIONS</div>
-        ${scenesHTML}
-      </div>` : ""}
+      ${sfBlock(videoLabel.replace("Short Form — ", "") + " — Agent Instructions (paste into Omni Flash Instructions panel)", v.agent_instructions)}
+      ${sfBlock(videoLabel.replace("Short Form — ", "") + " — Agent Prompt (paste into Omni Flash Chat — all clips)", v.agent_prompt)}
+      ${sfBlock(videoLabel.replace("Short Form — ", "") + " — TTS Script (paste into AI Studio)", v.tts_script)}
       <div class="fl-sf-platforms">
         <div class="fl-sf-platform-label">PLATFORMS</div>
         ${sfCopy("Instagram — Caption", ig.caption)}
@@ -2681,12 +2664,20 @@ function renderFlowShortForm() {
         ${sfCopy("YouTube Short — Description", yt.description)}
         ${yt.tags?.length ? sfCopy("YouTube Short — Tags", yt.tags) : ""}
         ${sfCopy("LinkedIn — Writeup", li.writeup)}
+        ${sfMeta("CTA", v.cta)}
       </div>
     </div>`;
   }
 
-  container.innerHTML = buildVideoHTML(flowShortFormState.video_a, "Short Form — Video A") +
-                        buildVideoHTML(flowShortFormState.video_b, "Short Form — Video B");
+  const fileRenameHTML = flowShortFormState.file_rename_prompt
+    ? sfBlock("File Rename Prompt (paste into Omni Flash Chat after all clips approved)", flowShortFormState.file_rename_prompt)
+    : "";
+
+  container.innerHTML =
+    buildVideoHTML(flowShortFormState.video_a, "Short Form — Video A") +
+    buildVideoHTML(flowShortFormState.video_b, "Short Form — Video B") +
+    (fileRenameHTML ? `<div class="fl-sf-rename-block">${fileRenameHTML}</div>` : "");
+
   container.style.display = "";
   container.addEventListener("click", e => {
     const btn = e.target.closest("[data-flsf]");
