@@ -1913,6 +1913,69 @@ html, body {
   .fl-td-titles-row { grid-template-columns: 1fr; }
 }
 
+/* Short Form — Step 13 */
+.fl-sf-video-panel {
+  background: #fff;
+  border: 1px solid #CFD8DC;
+  border-radius: 8px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  margin-bottom: 12px;
+}
+.fl-sf-video-header { margin-bottom: 2px; }
+.fl-sf-meta-block {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+  background: #F4F6F8;
+  border: 1px solid #CFD8DC;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.fl-sf-meta-row { display: flex; flex-direction: column; gap: 2px; }
+.fl-sf-meta-label { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #78909C; }
+.fl-sf-meta-val { font-size: 0.73rem; color: #0B1829; line-height: 1.4; }
+.fl-sf-field { display: flex; flex-direction: column; gap: 5px; }
+.fl-sf-label-row { display: flex; align-items: center; justify-content: space-between; }
+.fl-sf-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #78909C; }
+.fl-sf-value {
+  background: #F4F6F8;
+  border: 1px solid #CFD8DC;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 0.78rem;
+  color: #0B1829;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.fl-sf-scenes-block { display: flex; flex-direction: column; gap: 8px; }
+.fl-sf-scenes-label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #78909C; margin-bottom: 2px; }
+.fl-sf-scene {
+  border: 1px solid #CFD8DC;
+  border-left: 3px solid #1565C0;
+  border-radius: 0 6px 6px 0;
+  background: #F4F6F8;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fl-sf-scene-header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fl-sf-clip-num { font-size: 0.65rem; font-weight: 700; color: #0B1829; background: #CFD8DC; border-radius: 4px; padding: 2px 6px; }
+.fl-sf-section-badge { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; background: rgba(21,101,192,0.12); color: #1565C0; border-radius: 4px; padding: 2px 6px; }
+.fl-sf-seconds { font-size: 0.6rem; color: #78909C; }
+.fl-sf-overlay-pill { font-size: 0.6rem; background: rgba(11,24,41,0.08); color: #0B1829; border-radius: 4px; padding: 2px 6px; }
+.fl-sf-sfx-pill { font-size: 0.6rem; background: rgba(249,168,37,0.15); color: #E65100; border-radius: 4px; padding: 2px 6px; }
+.fl-sf-scene-prompt-row { display: flex; align-items: flex-start; gap: 8px; }
+.fl-sf-scene-prompt { font-size: 0.7rem; color: #0B1829; line-height: 1.5; flex: 1; }
+.fl-sf-platforms { display: flex; flex-direction: column; gap: 10px; }
+.fl-sf-platform-label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #78909C; }
+@media (max-width: 580px) { .fl-sf-meta-block { grid-template-columns: 1fr; } }
+
 /* Batch card */
 .fl-batch-card {
   background: #fff;

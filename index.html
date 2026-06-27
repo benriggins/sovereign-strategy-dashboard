@@ -208,6 +208,18 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
         </div>
       </section>
       <div id="fl-titledesc-content" class="fl-content" style="display:none;"></div>
+
+      <section class="panel fl-import-panel">
+        <span class="panel-label">Short Form — Step 13</span>
+        <p class="fl-import-desc">Paste the short form JSON from your outputter — two videos, each with script, scene directions, and platform copy.</p>
+        <textarea id="fl-shortform-box" class="import-box fl-import-box"
+          placeholder='{&#10;  "video_a": { "concept": "...", "hook_type": "...", "script": "...", "scene_directions": [], "platforms": {} },&#10;  "video_b": { ... }&#10;}'></textarea>
+        <div class="import-buttons">
+          <button id="btn-fl-shortform-import" class="btn btn-primary">Import Short Form</button>
+          <button id="btn-fl-shortform-clear" class="btn">Clear</button>
+        </div>
+      </section>
+      <div id="fl-shortform-content" class="fl-content" style="display:none;"></div>
     </div><!-- /#flow-tab-content -->
 
     <footer class="footer">

@@ -28,7 +28,8 @@ const CONFIG = {
     "LinkedIn Carousel",
     "LinkedIn James Post",
     "LinkedIn LibertyCES Post",
-    "LinkedIn Newsletter"
+    "LinkedIn Newsletter",
+    "Short Form Video"
   ],
   priorities: ["Build First", "Build Second", "Build Later"],
   statuses: ["Idea", "Approved", "In Progress", "Built", "Published", "Paused"],
@@ -100,6 +101,7 @@ Social / Video:
 * LinkedIn James Post
 * LinkedIn LibertyCES Post
 * LinkedIn Newsletter
+* Short Form Video
 
 Legacy (accepted but prefer hub platforms above for web):
 * Webpage
@@ -184,7 +186,8 @@ const PLATFORM_ABBREV = {
   "LinkedIn Carousel":            "LI Carousel",
   "LinkedIn James Post":          "LI James",
   "LinkedIn LibertyCES Post":     "LI LibertyCES",
-  "LinkedIn Newsletter":          "LI Newsletter"
+  "LinkedIn Newsletter":          "LI Newsletter",
+  "Short Form Video":             "Short Form"
 };
 
 /* =========================================================================
@@ -1918,6 +1921,30 @@ function init() {
     renderFlowTitleDesc();
     showMessage("Title & description cleared.", "info");
   });
+
+  // Short Form — Step 13
+  loadFlowShortForm();
+  renderFlowShortForm();
+  $("#btn-fl-shortform-import").addEventListener("click", () => {
+    const raw = $("#fl-shortform-box").value.trim();
+    if (!raw) { showMessage("Nothing to import.", "warn"); return; }
+    try {
+      flowShortFormState = JSON.parse(raw);
+      saveFlowShortForm();
+      renderFlowShortForm();
+      showMessage("Short form packet imported.", "success");
+    } catch(err) {
+      showMessage("Could not parse short form — check the JSON format.", "error");
+    }
+  });
+  $("#btn-fl-shortform-clear").addEventListener("click", () => {
+    if (!confirm("Clear short form packet?")) return;
+    flowShortFormState = null;
+    try { localStorage.removeItem(FLOW_SHORTFORM_KEY); } catch(e) {}
+    $("#fl-shortform-box").value = "";
+    renderFlowShortForm();
+    showMessage("Short form cleared.", "info");
+  });
 }
 
 /* =========================================================================
@@ -2461,9 +2488,11 @@ function initTabs() {
 const FLOW_STORAGE_KEY     = "sovereign_strategy_flow_v1";
 const FLOW_TTS_KEY         = "sovereign_strategy_flow_tts_v1";
 const FLOW_TITLEDESC_KEY   = "sovereign_strategy_flow_titledesc_v1";
+const FLOW_SHORTFORM_KEY   = "sovereign_strategy_flow_shortform_v1";
 let flowState = null;
 let flowTTSState = null;
 let flowTitleDescState = null;
+let flowShortFormState = null;
 
 const flowCopyRegistry = {};
 let flowCopySeq = 0;
@@ -2489,6 +2518,14 @@ function flMetaReg(text) {
   return key;
 }
 
+const flowSFReg = {};
+let flowSFSeq = 0;
+function flSFReg(text) {
+  const key = "fsf_" + (++flowSFSeq);
+  flowSFReg[key] = String(text || "");
+  return key;
+}
+
 function saveFlow() {
   if (!flowState) return;
   try { localStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(flowState)); } catch(e) {}
@@ -2509,6 +2546,13 @@ function saveFlowTitleDesc() {
 }
 function loadFlowTitleDesc() {
   try { const r = localStorage.getItem(FLOW_TITLEDESC_KEY); if (r) flowTitleDescState = JSON.parse(r); } catch(e) {}
+}
+function saveFlowShortForm() {
+  if (!flowShortFormState) return;
+  try { localStorage.setItem(FLOW_SHORTFORM_KEY, JSON.stringify(flowShortFormState)); } catch(e) {}
+}
+function loadFlowShortForm() {
+  try { const r = localStorage.getItem(FLOW_SHORTFORM_KEY); if (r) flowShortFormState = JSON.parse(r); } catch(e) {}
 }
 
 function parseFlowPacket(text) {
@@ -3103,6 +3147,98 @@ function renderFlowTitleDesc() {
     const btn = e.target.closest("[data-flmeta]");
     if (!btn) return;
     const text = flowMetaReg[btn.dataset.flmeta];
+    if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
+  });
+}
+
+function renderFlowShortForm() {
+  Object.keys(flowSFReg).forEach(k => delete flowSFReg[k]);
+  flowSFSeq = 0;
+  const container = $("#fl-shortform-content");
+  if (!container) return;
+  if (!flowShortFormState) { container.style.display = "none"; container.innerHTML = ""; return; }
+
+  function sfCopy(label, text) {
+    if (!text) return "";
+    const arr = Array.isArray(text) ? text.join("\n") : String(text);
+    const k = flSFReg(arr);
+    return `<div class="fl-sf-field">
+      <div class="fl-sf-label-row">
+        <span class="fl-sf-label">${escapeHTML(label)}</span>
+        <button class="fl-copy-btn fl-copy-btn-xs" data-flsf="${k}" data-label="Copy">Copy</button>
+      </div>
+      <div class="fl-sf-value">${escapeHTML(arr)}</div>
+    </div>`;
+  }
+
+  function sfMeta(label, text) {
+    if (!text) return "";
+    return `<div class="fl-sf-meta-row"><span class="fl-sf-meta-label">${escapeHTML(label)}</span><span class="fl-sf-meta-val">${escapeHTML(String(text))}</span></div>`;
+  }
+
+  function buildVideoHTML(v, label) {
+    if (!v) return "";
+    const p = v.platforms || {};
+    const ig = p.instagram || {};
+    const yt = p.youtube_short || {};
+    const li = p.linkedin || {};
+
+    const scenesHTML = (v.scene_directions || []).map(s => {
+      const parts = [
+        `<span class="fl-sf-clip-num">Clip ${s.clip}</span>`,
+        s.section    ? `<span class="fl-sf-section-badge">${escapeHTML(s.section)}</span>` : "",
+        s.seconds    ? `<span class="fl-sf-seconds">${escapeHTML(s.seconds)}s</span>` : "",
+        s.text_overlay ? `<span class="fl-sf-overlay-pill">Text: ${escapeHTML(s.text_overlay)}</span>` : "",
+        s.audio_sfx  ? `<span class="fl-sf-sfx-pill">SFX: ${escapeHTML(s.audio_sfx)}</span>` : "",
+      ].filter(Boolean).join(" ");
+
+      const promptK = s.omni_flash_prompt ? flSFReg(s.omni_flash_prompt) : null;
+      const refHTML = (s.ref && !s.ref.toLowerCase().includes("null")) ? `<span class="fl-ref-badge" style="margin-top:4px;">REF: ${escapeHTML(s.ref)}${s.ref_file ? ` — ${escapeHTML(s.ref_file)}` : ""}</span>` : "";
+
+      return `<div class="fl-sf-scene">
+        <div class="fl-sf-scene-header">${parts}</div>
+        ${s.omni_flash_prompt ? `<div class="fl-sf-scene-prompt-row">
+          <div class="fl-sf-scene-prompt">${escapeHTML(s.omni_flash_prompt)}</div>
+          <button class="fl-copy-btn fl-copy-btn-xs" data-flsf="${promptK}" data-label="Copy Prompt">Copy</button>
+        </div>` : ""}
+        ${refHTML}
+      </div>`;
+    }).join("");
+
+    return `<div class="fl-sf-video-panel">
+      <div class="fl-sf-video-header">
+        <div class="fl-panel-title">${escapeHTML(label)}</div>
+      </div>
+      <div class="fl-sf-meta-block">
+        ${sfMeta("Hook Type", v.hook_type)}
+        ${sfMeta("SEO Keyword", v.seo_keyword)}
+        ${sfMeta("CTA", v.cta)}
+        ${sfMeta("Concept", v.concept)}
+      </div>
+      ${sfCopy("Script", v.script)}
+      ${scenesHTML ? `<div class="fl-sf-scenes-block">
+        <div class="fl-sf-scenes-label">SCENE DIRECTIONS</div>
+        ${scenesHTML}
+      </div>` : ""}
+      <div class="fl-sf-platforms">
+        <div class="fl-sf-platform-label">PLATFORMS</div>
+        ${sfCopy("Instagram — Caption", ig.caption)}
+        ${ig.hashtags?.length ? sfCopy("Instagram — Hashtags", ig.hashtags) : ""}
+        ${sfCopy("YouTube Short — Title", yt.title)}
+        ${sfCopy("YouTube Short — Description", yt.description)}
+        ${yt.tags?.length ? sfCopy("YouTube Short — Tags", yt.tags) : ""}
+        ${sfCopy("LinkedIn — Writeup", li.writeup)}
+      </div>
+    </div>`;
+  }
+
+  container.innerHTML = buildVideoHTML(flowShortFormState.video_a, "Short Form — Video A") +
+                        buildVideoHTML(flowShortFormState.video_b, "Short Form — Video B");
+  container.style.display = "";
+  container.addEventListener("click", e => {
+    const btn = e.target.closest("[data-flsf]");
+    if (!btn) return;
+    const text = flowSFReg[btn.dataset.flsf];
     if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
   });
 }
