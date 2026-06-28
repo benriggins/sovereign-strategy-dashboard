@@ -1504,6 +1504,39 @@ html, body {
   padding: 18px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fl-sf-slug-header {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #78909C;
+}
+.fl-sf-slug-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fl-sf-slug-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #546E7A;
+  min-width: 52px;
+}
+.fl-sf-slug-code {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #0B1829;
+  background: #F4F6F8;
+  border: 1px solid #CFD8DC;
+  padding: 3px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+  flex: 1;
 }
 @media (max-width: 580px) { .fl-sf-meta-block { grid-template-columns: 1fr; } }
 
