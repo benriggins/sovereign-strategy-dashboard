@@ -1423,6 +1423,8 @@ function renderCard(d) {
       <button class="btn-mini btn-danger" data-act="delete" data-id="${d.id}">Delete</button>
     </div>
 
+    ${renderCardOCSection(d)}
+
     <div class="edit-area" data-edit="${d.id}" hidden></div>
   </article>`;
 }
@@ -1448,12 +1450,42 @@ function onCardChange(e) {
   d.status = sel.value;
   save();
   renderStats();
-  // Recolor the dropdown without a full re-render.
   sel.className = "status-select status-" + d.status.toLowerCase().replace(/[^a-z]+/g, "-");
   sel.setAttribute("data-act", "status");
+  // When content is set to Approved, bump approval_status to READY_FOR_PREVIEW
+  // (but never to BENJAMIN_APPROVED — that requires explicit confirmation).
+  if (d.status === "Approved" && ocAccountKey(d.platform)) {
+    const taskId = ocTaskId(d);
+    const ov = openclawState.taskOverrides[taskId] || {};
+    if (!ov.approval_status || ov.approval_status === OC_APPROVAL.NOT_READY) {
+      if (!openclawState.taskOverrides[taskId]) openclawState.taskOverrides[taskId] = {};
+      openclawState.taskOverrides[taskId].approval_status = OC_APPROVAL.READY_FOR_PREVIEW;
+      saveOpenClaw();
+    }
+  }
+  // Refresh the card's OC section in place
+  const cardEl = document.querySelector(`.card[data-id="${d.id}"]`);
+  if (cardEl) {
+    const ocSection = cardEl.querySelector(".card-oc-section");
+    if (ocSection) ocSection.outerHTML = renderCardOCSection(d);
+  }
 }
 
 function onCardClick(e) {
+  // OpenClaw approve button (on deliverable cards)
+  const ocApproveBtn = e.target.closest("[data-oc-approve]");
+  if (ocApproveBtn) {
+    const d = findById(ocApproveBtn.dataset.ocApprove);
+    if (d) ocOpenApprovalModal(d);
+    return;
+  }
+  // OpenClaw revoke button (on deliverable cards)
+  const ocRevokeBtn = e.target.closest("[data-oc-revoke]");
+  if (ocRevokeBtn) {
+    ocRevokeApproval(ocRevokeBtn.dataset.ocRevoke);
+    return;
+  }
+
   // Blueprint Copy Card buttons (inside inline blueprint cards)
   const bpBtn = e.target.closest("[data-copyimgcard]");
   if (bpBtn) {
@@ -1918,6 +1950,88 @@ function init() {
     renderFlowShortForm();
     showMessage("Short form cleared.", "info");
   });
+
+  // OpenClaw
+  loadOpenClaw();
+
+  // Queue filter buttons
+  $("#openclaw-tab-content").addEventListener("click", e => {
+    // Filter buttons
+    const filterBtn = e.target.closest(".oc-filter-btn");
+    if (filterBtn) { ocQueueFilter = filterBtn.dataset.filter; renderOCTaskQueue(); return; }
+
+    // Approve button in queue
+    const approveBtn = e.target.closest("[data-oc-approve]");
+    if (approveBtn) {
+      const d = findById(approveBtn.dataset.ocApprove);
+      if (d) ocOpenApprovalModal(d);
+      return;
+    }
+    // Revoke button in queue
+    const revokeBtn = e.target.closest("[data-oc-revoke]");
+    if (revokeBtn) { ocRevokeApproval(revokeBtn.dataset.ocRevoke); return; }
+
+    // Copy task packet
+    const copyBtn = e.target.closest("[data-oc-copy-packet]");
+    if (copyBtn) {
+      const text = ocPacketCopyReg[copyBtn.dataset.ocCopyPacket];
+      if (text !== undefined) copyToClipboard(text, copyBtn, "Copied");
+      return;
+    }
+  });
+
+  // Result import
+  $("#btn-oc-result-import").addEventListener("click", () => {
+    const raw = $("#oc-result-box").value.trim();
+    const msgEl = $("#oc-result-message");
+    msgEl.style.display = "none";
+    if (!raw) { showMessage("Nothing to import.", "warn"); return; }
+    try {
+      const pkt = ocParseResultPacket(raw);
+      const d   = ocValidateResultPacket(pkt);
+      ocApplyResultPacket(pkt, d);
+      renderOpenClawTab();
+      renderSections();
+      msgEl.className = "oc-result-message oc-result-ok";
+      msgEl.textContent = "✓ RESULT_IMPORTED — " + pkt.task_id;
+      msgEl.style.display = "";
+      showMessage("OpenClaw result imported: " + pkt.task_id, "success");
+    } catch(err) {
+      msgEl.className = "oc-result-message oc-result-err";
+      msgEl.textContent = "✗ " + (err.code || "RESULT_REJECTED_INVALID_PACKET") + " — " + (err.message || "Unknown error");
+      msgEl.style.display = "";
+      showMessage((err.code || "Import failed") + ": " + err.message, "error");
+    }
+  });
+
+  $("#btn-oc-result-clear").addEventListener("click", () => {
+    $("#oc-result-box").value = "";
+    const msgEl = $("#oc-result-message");
+    msgEl.style.display = "none";
+  });
+
+  // Clear run log
+  $("#btn-oc-clear-log").addEventListener("click", () => {
+    if (!confirm("Clear the entire OpenClaw run log?")) return;
+    openclawState.runLog = [];
+    saveOpenClaw();
+    renderOCRunLog();
+    showMessage("Run log cleared.", "info");
+  });
+
+  // Approval modal buttons
+  $("#oc-modal-confirm").addEventListener("click", ocConfirmApproval);
+  $("#oc-modal-cancel").addEventListener("click",  ocCloseModal);
+  $("#oc-modal-close").addEventListener("click",   ocCloseModal);
+  $("#oc-modal-revoke").addEventListener("click",  () => {
+    if (!ocPendingApprovalId) return;
+    const d = findById(ocPendingApprovalId);
+    if (d) ocRevokeApproval(ocTaskId(d));
+  });
+  // Close modal on backdrop click
+  $("#oc-approval-modal").addEventListener("click", e => {
+    if (e.target === $("#oc-approval-modal")) ocCloseModal();
+  });
 }
 
 
@@ -1928,8 +2042,10 @@ function initTabs() {
     btn.addEventListener("click", () => {
       const target = btn.dataset.tab;
       $all(".tab-btn").forEach(b => b.classList.toggle("tab-active", b.dataset.tab === target));
-      $("#deliverables-tab-content").style.display = target === "deliverables" ? "" : "none";
-      $("#flow-tab-content").style.display         = target === "flow"         ? "" : "none";
+      $("#deliverables-tab-content").style.display  = target === "deliverables" ? "" : "none";
+      $("#flow-tab-content").style.display          = target === "flow"         ? "" : "none";
+      $("#openclaw-tab-content").style.display      = target === "openclaw"     ? "" : "none";
+      if (target === "openclaw") renderOpenClawTab();
     });
   });
 }
@@ -2708,5 +2824,548 @@ function renderFlowShortForm() {
     if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
   });
 }
+
+/* =========================================================================
+ * OPENCLAW ADAPTER LAYER — v1
+ * Third tab. Machine-readable task queue, account registry, result
+ * write-back (paste-back only), run log, per-card approval flow.
+ * Sits on top of existing Deliverables + Flow tabs. Nothing is rebuilt.
+ * ========================================================================= */
+
+const OPENCLAW_STORAGE_KEY = "sovereign_openclaw_v1";
+
+const OPENCLAW_ACCOUNT_REGISTRY = [
+  { account_key: "linkedin_james_personal",             browser_profile: "linkedin-james",         platform: "LinkedIn",              destination_type: "personal_profile",          destination_url: "https://www.linkedin.com/in/james-riggins-494003173/", notes: "" },
+  { account_key: "linkedin_libertyces_company_via_james", browser_profile: "linkedin-james",       platform: "LinkedIn",              destination_type: "company_page",              destination_url: "TBD", notes: "Uses James LinkedIn session if James is the admin." },
+  { account_key: "youtube_libertyces_channel",          browser_profile: "google-libertyces",      platform: "YouTube",               destination_type: "youtube_channel_or_youtube_studio", destination_url: "https://studio.youtube.com/", notes: "OpenClaw must verify active channel is LibertyCES before uploading." },
+  { account_key: "instagram_libertyces_business",       browser_profile: "meta-libertyces",        platform: "Instagram",             destination_type: "instagram_business_profile", destination_url: "https://www.instagram.com/", notes: "May route through Instagram web or Meta Business Suite depending on runbook." },
+  { account_key: "meta_business_libertyces",            browser_profile: "meta-libertyces",        platform: "Meta Business Suite",   destination_type: "business_suite_account",    destination_url: "https://business.facebook.com/", notes: "Used for Instagram/Facebook publishing workflows if needed." },
+  { account_key: "google_flow_libertyces",              browser_profile: "google-libertyces",      platform: "Google Flow",           destination_type: "video_generation_tool",     destination_url: "TBD", notes: "Used only for video generation prompts and downloads. OpenClaw does not invent prompts." },
+  { account_key: "ai_studio_libertyces_tts",            browser_profile: "google-libertyces",      platform: "Google AI Studio",      destination_type: "tts_audio_generation",      destination_url: "https://aistudio.google.com/", notes: "Used only for TTS/audio generation. OpenClaw pastes dashboard script exactly." },
+  { account_key: "chatgpt_libertyces_project",          browser_profile: "chatgpt-benjamin",       platform: "ChatGPT",               destination_type: "specific_chatgpt_project",  destination_url: "TBD", notes: "Must use the specific ChatGPT project with LibertyCES design system loaded. Not a generic chat." },
+  { account_key: "manus_libertyces",                    browser_profile: "manus-benjamin",         platform: "Manus",                 destination_type: "manus_workspace",           destination_url: "TBD", notes: "Used for Manus prompts/research relay/carousel workflows. OpenClaw pastes dashboard prompts exactly." },
+  { account_key: "squarespace_libertyces_site",         browser_profile: "squarespace-libertyces", platform: "Squarespace",           destination_type: "website_editor",            destination_url: "TBD", notes: "OpenClaw must verify it is editing the LibertyCES site." },
+  { account_key: "gcs_libertyces_assets",               browser_profile: "google-libertyces",      platform: "Google Cloud Storage",  destination_type: "storage_bucket_folder",     destination_url: "TBD", bucket_or_folder: "headquarters_001/SovereignHeadquartersWebsite/", notes: "Used for uploading approved image assets only. OpenClaw must follow SEO filename law." }
+];
+
+const OC_PLATFORM_ACCOUNT_MAP = {
+  "LinkedIn James Post":          "linkedin_james_personal",
+  "LinkedIn LibertyCES Post":     "linkedin_libertyces_company_via_james",
+  "LinkedIn Newsletter":          "linkedin_libertyces_company_via_james",
+  "LinkedIn Carousel":            "linkedin_james_personal",
+  "Instagram Video":              "instagram_libertyces_business",
+  "Instagram Carousel":           "instagram_libertyces_business",
+  "YouTube / NotebookLM Video":   "youtube_libertyces_channel",
+  "Short Form Video":             "youtube_libertyces_channel",
+  "Solutions Hub | Pillar":       "squarespace_libertyces_site",
+  "Solutions Hub | Blog":         "squarespace_libertyces_site",
+  "Industries Hub | Pillar":      "squarespace_libertyces_site",
+  "Industries Hub | Application": "squarespace_libertyces_site",
+  "Products Hub | Pillar":        "squarespace_libertyces_site",
+  "Products Hub | Product Page":  "squarespace_libertyces_site",
+  "Webpage":                      "squarespace_libertyces_site",
+  "Product Page":                 "squarespace_libertyces_site",
+  "Blog":                         "squarespace_libertyces_site"
+};
+
+const OC_PLATFORM_ACTION_MAP = {
+  "LinkedIn James Post":          "publish_linkedin_post",
+  "LinkedIn LibertyCES Post":     "publish_linkedin_post",
+  "LinkedIn Newsletter":          "publish_linkedin_newsletter",
+  "LinkedIn Carousel":            "publish_linkedin_carousel",
+  "Instagram Video":              "publish_instagram_reel",
+  "Instagram Carousel":           "publish_instagram_carousel",
+  "YouTube / NotebookLM Video":   "upload_youtube_video",
+  "Short Form Video":             "upload_youtube_short",
+  "Solutions Hub | Pillar":       "publish_squarespace_html",
+  "Solutions Hub | Blog":         "publish_squarespace_html",
+  "Industries Hub | Pillar":      "publish_squarespace_html",
+  "Industries Hub | Application": "publish_squarespace_html",
+  "Products Hub | Pillar":        "publish_squarespace_html",
+  "Products Hub | Product Page":  "publish_squarespace_html",
+  "Webpage":                      "publish_squarespace_html",
+  "Product Page":                 "publish_squarespace_html",
+  "Blog":                         "publish_squarespace_html"
+};
+
+const OC_CTA_PLACEMENT_MAP = {
+  "LinkedIn James Post":          "FIRST_PINNED_COMMENT_ONLY",
+  "LinkedIn LibertyCES Post":     "FIRST_PINNED_COMMENT_ONLY",
+  "LinkedIn Newsletter":          "FIRST_PINNED_COMMENT_ONLY",
+  "LinkedIn Carousel":            "FIRST_PINNED_COMMENT_ONLY",
+  "Instagram Video":              "NO_OUTBOUND_LINKS_IN_CAPTION",
+  "Instagram Carousel":           "NO_OUTBOUND_LINKS_IN_CAPTION",
+  "YouTube / NotebookLM Video":   "VIDEO_DESCRIPTION_ONLY",
+  "Short Form Video":             "VIDEO_DESCRIPTION_ONLY",
+  "Solutions Hub | Pillar":       "HERO_MIDPAGE_FOOTER",
+  "Solutions Hub | Blog":         "HERO_MIDPAGE_FOOTER",
+  "Industries Hub | Pillar":      "HERO_MIDPAGE_FOOTER",
+  "Industries Hub | Application": "HERO_MIDPAGE_FOOTER",
+  "Products Hub | Pillar":        "HERO_MIDPAGE_FOOTER",
+  "Products Hub | Product Page":  "HERO_MIDPAGE_FOOTER",
+  "Webpage":                      "HERO_MIDPAGE_FOOTER",
+  "Product Page":                 "HERO_MIDPAGE_FOOTER",
+  "Blog":                         "HERO_MIDPAGE_FOOTER"
+};
+
+/* Runbook patterns that are permitted to update session_status */
+const OC_SESSION_RUNBOOK_PATTERNS = ["SESSION_HEALTH", "SESSION_PREFLIGHT", "SESSION_VERIFY", "SESSION_CHECK"];
+
+/* Fields that OpenClaw result packets may NEVER update */
+const OC_FORBIDDEN_UPDATE_FIELDS = [
+  "title", "caption", "description", "post_body", "script", "prompt",
+  "image_blueprint", "cta_text", "cta_url", "approval_status",
+  "approved_by", "approved_at", "approval_scope", "destination_url"
+];
+
+const OC_APPROVAL = {
+  NOT_READY:               "NOT_READY",
+  READY_FOR_PREVIEW:       "READY_FOR_PREVIEW",
+  PENDING_APPROVAL:        "PENDING_BENJAMIN_APPROVAL",
+  APPROVED:                "BENJAMIN_APPROVED",
+  REJECTED:                "BENJAMIN_REJECTED",
+  REVOKED:                 "REVOKED"
+};
+
+/* ---- State ---- */
+
+let openclawState = {
+  taskOverrides: {},   // task_id → { approval_status, approved_by, approved_at, session_status, last_openclaw_* }
+  runLog: [],          // array of run log entries, newest first
+  accountSessions: {}  // account_key → { session_status, last_checked }
+};
+
+let ocQueueFilter = "ready";
+const ocPacketCopyReg = {};  // packetKey → packet text, rebuilt each renderOCTaskQueue
+let ocPendingApprovalId = null; // deliverable .id currently in modal
+
+function loadOpenClaw() {
+  try {
+    const raw = localStorage.getItem(OPENCLAW_STORAGE_KEY);
+    if (raw) openclawState = Object.assign({ taskOverrides: {}, runLog: [], accountSessions: {} }, JSON.parse(raw));
+  } catch(e) {}
+}
+
+function saveOpenClaw() {
+  try { localStorage.setItem(OPENCLAW_STORAGE_KEY, JSON.stringify(openclawState)); } catch(e) {}
+}
+
+/* ---- Routing helpers ---- */
+
+function ocAccountKey(platform) { return OC_PLATFORM_ACCOUNT_MAP[platform] || null; }
+function ocActionType(platform)  { return OC_PLATFORM_ACTION_MAP[platform] || "unknown"; }
+function ocCTAPlacement(platform){ return OC_CTA_PLACEMENT_MAP[platform] || "UNKNOWN"; }
+function ocAccountRecord(key)    { return OPENCLAW_ACCOUNT_REGISTRY.find(a => a.account_key === key) || null; }
+
+/* ---- Stable task ID (platform + title slug) ---- */
+
+function ocTaskId(d) {
+  return "oc_" + ((d.platform || "") + "_" + (d.deliverable || ""))
+    .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").substring(0, 72);
+}
+
+function ocFindDeliverable(taskId) {
+  return state.deliverables.find(d => ocTaskId(d) === taskId) || null;
+}
+
+/* ---- Execution eligibility ---- */
+
+function ocEligibility(d) {
+  const blockers = [];
+  const key = ocAccountKey(d.platform);
+  if (!key) { blockers.push("No account mapping for platform: " + d.platform); return { executable: false, blockers }; }
+
+  const ov = openclawState.taskOverrides[ocTaskId(d)] || {};
+  const approval = ov.approval_status || OC_APPROVAL.NOT_READY;
+  if (approval !== OC_APPROVAL.APPROVED) blockers.push("Approval required (current: " + approval + ")");
+
+  const session = ov.session_status || "UNKNOWN";
+  if (session !== "HEALTHY") blockers.push("Session not healthy (current: " + session + ")");
+
+  if (!["Approved", "In Progress"].includes(d.status))
+    blockers.push("Content status '" + d.status + "' not in executable set [Approved, In Progress]");
+
+  return { executable: blockers.length === 0, blockers };
+}
+
+/* ---- Task packet generator ---- */
+
+function ocBuildPacket(d) {
+  const taskId = ocTaskId(d);
+  const ov = openclawState.taskOverrides[taskId] || {};
+  const key = ocAccountKey(d.platform);
+  const acct = ocAccountRecord(key);
+  const elig = ocEligibility(d);
+  const campaignId = ((state.meta.project || state.meta.topic || "unknown") + "_" + (state.meta.client || ""))
+    .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+  const pkt = {
+    task_id:                  taskId,
+    campaign_id:              campaignId,
+    platform:                 d.platform,
+    account_key:              key || "UNMAPPED",
+    browser_profile:          acct ? acct.browser_profile : "UNMAPPED",
+    destination_url:          acct ? (acct.destination_url || "TBD") : "TBD",
+    action_type:              ocActionType(d.platform),
+    runbook_id:               "TBD",
+    status:                   d.status,
+    approval_status:          ov.approval_status || OC_APPROVAL.NOT_READY,
+    approved_by:              ov.approved_by || null,
+    approved_at:              ov.approved_at || null,
+    session_status:           ov.session_status || "UNKNOWN",
+    cta_placement:            ocCTAPlacement(d.platform),
+    execution_eligible:       elig.executable,
+    blocking_notes:           elig.blockers.join("; ") || "None",
+    title:                    d.deliverable,
+    url:                      d.url || null,
+    media_assets:             [],
+    last_updated_at:          new Date().toISOString(),
+    last_openclaw_checked_at: ov.last_openclaw_checked_at || null,
+    last_openclaw_result:     ov.last_openclaw_result || null,
+    last_openclaw_runbook:    ov.last_openclaw_runbook || null,
+    last_openclaw_notes:      ov.last_openclaw_notes || null,
+    last_openclaw_blocker:    ov.last_openclaw_blocker || null
+  };
+  return "BEGIN_OPENCLAW_TASK_PACKET_V1\n" + JSON.stringify(pkt, null, 2) + "\nEND_OPENCLAW_TASK_PACKET_V1";
+}
+
+/* ---- Result packet parsing + validation ---- */
+
+function ocParseResultPacket(raw) {
+  const text = (raw || "").trim();
+  const b = text.indexOf("BEGIN_OPENCLAW_RESULT_V1");
+  const e = text.indexOf("END_OPENCLAW_RESULT_V1");
+  if (b === -1 || e === -1 || e < b)
+    throw { code: "RESULT_REJECTED_INVALID_PACKET", message: "Missing or mismatched BEGIN/END_OPENCLAW_RESULT_V1 wrapper." };
+  const inner = text.slice(b + "BEGIN_OPENCLAW_RESULT_V1".length, e).trim();
+  try { return JSON.parse(inner); }
+  catch(err) { throw { code: "RESULT_REJECTED_INVALID_PACKET", message: "Invalid JSON: " + err.message }; }
+}
+
+function ocValidateResultPacket(pkt) {
+  if (!pkt.task_id)
+    throw { code: "RESULT_REJECTED_MISSING_TASK", message: "task_id is missing from result packet." };
+  if (!pkt.runbook_id)
+    throw { code: "RESULT_REJECTED_INVALID_PACKET", message: "runbook_id is missing from result packet." };
+
+  const d = ocFindDeliverable(pkt.task_id);
+  if (!d)
+    throw { code: "RESULT_REJECTED_MISSING_TASK", message: "task_id '" + pkt.task_id + "' does not match any deliverable in the current dashboard." };
+
+  const expectedKey = ocAccountKey(d.platform);
+  if (pkt.account_key && pkt.account_key !== expectedKey)
+    throw { code: "RESULT_REJECTED_ACCOUNT_MISMATCH", message: "account_key '" + pkt.account_key + "' does not match expected '" + expectedKey + "' for platform '" + d.platform + "'." };
+
+  const acct = ocAccountRecord(expectedKey);
+  if (acct && pkt.browser_profile && pkt.browser_profile !== acct.browser_profile)
+    throw { code: "RESULT_REJECTED_PROFILE_MISMATCH", message: "browser_profile '" + pkt.browser_profile + "' does not match expected '" + acct.browser_profile + "'." };
+
+  for (const field of OC_FORBIDDEN_UPDATE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(pkt, field))
+      throw { code: "RESULT_REJECTED_FORBIDDEN_FIELD", message: "Result packet contains forbidden field '" + field + "'. OpenClaw may not update content or approval fields." };
+  }
+
+  return d;
+}
+
+function ocApplyResultPacket(pkt, d) {
+  const taskId = pkt.task_id;
+  if (!openclawState.taskOverrides[taskId]) openclawState.taskOverrides[taskId] = {};
+  const ov = openclawState.taskOverrides[taskId];
+
+  if (pkt.last_openclaw_checked_at) ov.last_openclaw_checked_at = pkt.last_openclaw_checked_at;
+  if (pkt.last_openclaw_result)     ov.last_openclaw_result     = pkt.last_openclaw_result;
+  if (pkt.runbook_id)               ov.last_openclaw_runbook    = pkt.runbook_id;
+  if (pkt.notes)                    ov.last_openclaw_notes      = pkt.notes;
+  if (pkt.blocker)                  ov.last_openclaw_blocker    = pkt.blocker;
+
+  // session_status: only permitted for session verification runbooks
+  const isSessionRunbook = OC_SESSION_RUNBOOK_PATTERNS.some(p => (pkt.runbook_id || "").toUpperCase().includes(p));
+  if (isSessionRunbook && (pkt.session_status || pkt.result)) {
+    ov.session_status = pkt.session_status || (pkt.result === "SESSION_HEALTHY" ? "HEALTHY" : "UNKNOWN");
+  }
+
+  // Append run log entry
+  const entry = {
+    run_id:        pkt.run_id || ("oc_run_" + Date.now()),
+    task_id:       pkt.task_id,
+    runbook_id:    pkt.runbook_id,
+    timestamp:     pkt.last_openclaw_checked_at || new Date().toISOString(),
+    result:        pkt.result || pkt.last_openclaw_result || "UNKNOWN",
+    blocker:       pkt.blocker || "None",
+    notes:         pkt.notes || "",
+    status_before: pkt.status_before || d.status || "",
+    status_after:  pkt.status_after  || pkt.status_before || d.status || "",
+    platform:      d.platform,
+    account_key:   pkt.account_key || ocAccountKey(d.platform) || ""
+  };
+  openclawState.runLog.unshift(entry);
+  if (openclawState.runLog.length > 500) openclawState.runLog.length = 500;
+  saveOpenClaw();
+  return entry;
+}
+
+/* ---- Approval flow ---- */
+
+function ocOpenApprovalModal(d) {
+  ocPendingApprovalId = d.id;
+  const taskId = ocTaskId(d);
+  const ov = openclawState.taskOverrides[taskId] || {};
+  const key = ocAccountKey(d.platform);
+  const acct = ocAccountRecord(key);
+  const elig = ocEligibility(d);
+  const isApproved = ov.approval_status === OC_APPROVAL.APPROVED;
+
+  function row(label, val, cls) {
+    return `<div class="oc-modal-field">
+      <span class="oc-modal-field-label">${escapeHTML(label)}</span>
+      <span class="oc-modal-field-value${cls ? " " + cls : ""}">${escapeHTML(String(val == null ? "—" : val))}</span>
+    </div>`;
+  }
+
+  const blockerHTML = elig.blockers.length
+    ? elig.blockers.map(b => `<div class="oc-modal-blocker">⚠ ${escapeHTML(b)}</div>`).join("")
+    : `<div class="oc-modal-ok">✓ No blockers detected</div>`;
+
+  $("#oc-modal-body").innerHTML = `
+    <div class="oc-modal-section oc-modal-eligibility ${elig.executable ? "oc-elig-ok" : "oc-elig-blocked"}">
+      <div class="oc-modal-section-title">Execution Eligibility</div>
+      <div class="oc-elig-status">${elig.executable ? "EXECUTABLE" : "BLOCKED"}</div>
+      ${blockerHTML}
+    </div>
+    <div class="oc-modal-section">
+      <div class="oc-modal-section-title">Task</div>
+      ${row("task_id", taskId)}
+      ${row("action_type", ocActionType(d.platform))}
+      ${row("platform", d.platform)}
+      ${row("deliverable", d.deliverable)}
+      ${d.url ? row("url", d.url) : ""}
+    </div>
+    <div class="oc-modal-section">
+      <div class="oc-modal-section-title">Account & Routing</div>
+      ${row("account_key", key || "UNMAPPED")}
+      ${row("browser_profile", acct ? acct.browser_profile : "UNMAPPED")}
+      ${row("destination_url", acct ? acct.destination_url : "UNMAPPED")}
+      ${row("cta_placement", ocCTAPlacement(d.platform))}
+    </div>
+    <div class="oc-modal-section">
+      <div class="oc-modal-section-title">Current Status</div>
+      ${row("content_status", d.status)}
+      ${row("approval_status", ov.approval_status || OC_APPROVAL.NOT_READY)}
+      ${ov.approved_at ? row("approved_at", ov.approved_at) : ""}
+      ${row("session_status", ov.session_status || "UNKNOWN")}
+      ${ov.last_openclaw_result ? row("last_openclaw_result", ov.last_openclaw_result) : ""}
+    </div>`;
+
+  $("#oc-modal-confirm").textContent = isApproved ? "Re-Confirm Approval" : "Confirm Approval";
+  $("#oc-modal-revoke").style.display = isApproved ? "" : "none";
+  $("#oc-approval-modal").style.display = "flex";
+}
+
+function ocCloseModal() {
+  $("#oc-approval-modal").style.display = "none";
+  ocPendingApprovalId = null;
+}
+
+function ocConfirmApproval() {
+  if (!ocPendingApprovalId) return;
+  const d = findById(ocPendingApprovalId);
+  if (!d) return;
+  const taskId = ocTaskId(d);
+  if (!openclawState.taskOverrides[taskId]) openclawState.taskOverrides[taskId] = {};
+  const ov = openclawState.taskOverrides[taskId];
+  ov.approval_status = OC_APPROVAL.APPROVED;
+  ov.approved_by     = "Benjamin";
+  ov.approved_at     = new Date().toISOString();
+  ov.approval_scope  = taskId + "::" + ocActionType(d.platform);
+  saveOpenClaw();
+  ocCloseModal();
+  renderOpenClawTab();
+  renderSections();
+  showMessage("OpenClaw approval granted: " + taskId, "success");
+}
+
+function ocRevokeApproval(taskId) {
+  if (!openclawState.taskOverrides[taskId]) openclawState.taskOverrides[taskId] = {};
+  const ov = openclawState.taskOverrides[taskId];
+  ov.approval_status = OC_APPROVAL.REVOKED;
+  ov.approved_by     = null;
+  ov.approved_at     = null;
+  saveOpenClaw();
+  ocCloseModal();
+  renderOpenClawTab();
+  renderSections();
+  showMessage("OpenClaw approval revoked.", "warn");
+}
+
+/* ---- OpenClaw tab rendering ---- */
+
+function renderOpenClawTab() {
+  renderOCAccountRegistry();
+  renderOCTaskQueue();
+  renderOCRunLog();
+}
+
+function renderOCAccountRegistry() {
+  const el = $("#oc-account-registry");
+  if (!el) return;
+  const rows = OPENCLAW_ACCOUNT_REGISTRY.map(a => {
+    const sess = (openclawState.accountSessions[a.account_key] || {}).session_status || "UNKNOWN";
+    const sc = sess === "HEALTHY" ? "oc-sess-healthy" : sess === "UNKNOWN" ? "oc-sess-unknown" : "oc-sess-blocked";
+    const urlDisplay = (!a.destination_url || a.destination_url === "TBD")
+      ? `<span class="oc-tbd">TBD</span>`
+      : `<a href="${escapeHTML(a.destination_url)}" target="_blank" rel="noopener">${escapeHTML(a.destination_url)}</a>`;
+    return `<tr>
+      <td><code class="oc-code">${escapeHTML(a.account_key)}</code></td>
+      <td><code class="oc-code">${escapeHTML(a.browser_profile)}</code></td>
+      <td>${escapeHTML(a.platform)}</td>
+      <td class="oc-url-cell">${urlDisplay}</td>
+      <td><span class="oc-sess-badge ${sc}">${escapeHTML(sess)}</span></td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `<div class="oc-table-wrap"><table class="oc-reg-table">
+    <thead><tr><th>account_key</th><th>browser_profile</th><th>platform</th><th>destination_url</th><th>session</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+function renderOCTaskQueue() {
+  const el = $("#oc-task-queue");
+  if (!el) return;
+
+  // Clear + rebuild packet copy registry
+  Object.keys(ocPacketCopyReg).forEach(k => delete ocPacketCopyReg[k]);
+
+  buildDeliverableLabelMap();
+  const mapped = state.deliverables.filter(d => ocAccountKey(d.platform));
+  const tasks  = mapped.map(d => ({ d, elig: ocEligibility(d), ov: openclawState.taskOverrides[ocTaskId(d)] || {} }));
+  const ready   = tasks.filter(t => t.elig.executable);
+  const blocked = tasks.filter(t => !t.elig.executable);
+  const display = ocQueueFilter === "ready" ? ready : ocQueueFilter === "blocked" ? blocked : tasks;
+
+  // Update filter button labels
+  $all(".oc-filter-btn").forEach(btn => {
+    const f = btn.dataset.filter;
+    const n = f === "ready" ? ready.length : f === "blocked" ? blocked.length : tasks.length;
+    const label = f === "ready" ? "Ready" : f === "blocked" ? "Blocked" : "All";
+    btn.textContent = `${label} (${n})`;
+    btn.classList.toggle("oc-filter-active", f === ocQueueFilter);
+  });
+
+  if (!state.deliverables.length) {
+    el.innerHTML = `<p class="oc-empty">No deliverables imported yet. Import a Claude packet in the Deliverables tab first.</p>`;
+    return;
+  }
+  if (!display.length) {
+    el.innerHTML = `<p class="oc-empty">No ${ocQueueFilter === "all" ? "" : ocQueueFilter + " "}tasks.</p>`;
+    return;
+  }
+
+  el.innerHTML = display.map(({ d, elig, ov }) => {
+    const taskId = ocTaskId(d);
+    const approval = ov.approval_status || OC_APPROVAL.NOT_READY;
+    const approvalCls = approval === OC_APPROVAL.APPROVED ? "oc-appr-approved"
+      : approval === OC_APPROVAL.REVOKED ? "oc-appr-revoked"
+      : approval === OC_APPROVAL.REJECTED ? "oc-appr-rejected"
+      : "oc-appr-pending";
+
+    const pktKey = "ocpkt_" + taskId;
+    ocPacketCopyReg[pktKey] = ocBuildPacket(d);
+
+    const lastResult = ov.last_openclaw_result
+      ? `<div class="oc-task-last">Last: <strong>${escapeHTML(ov.last_openclaw_result)}</strong>${ov.last_openclaw_checked_at ? " · " + escapeHTML(ov.last_openclaw_checked_at) : ""}</div>`
+      : "";
+
+    return `<div class="oc-task-card ${elig.executable ? "oc-task-ready" : "oc-task-blocked"}" data-task-id="${escapeHTML(taskId)}">
+      <div class="oc-task-top">
+        <span class="oc-task-del-label">${escapeHTML(getDeliverableLabel(d) || d.platform)}</span>
+        <span class="oc-appr-badge ${approvalCls}">${escapeHTML(approval)}</span>
+        <span class="oc-exec-badge ${elig.executable ? "oc-exec-yes" : "oc-exec-no"}">${elig.executable ? "EXECUTABLE" : "BLOCKED"}</span>
+      </div>
+      <div class="oc-task-title">${escapeHTML(d.deliverable)}</div>
+      <code class="oc-task-id">${escapeHTML(taskId)}</code>
+      ${elig.blockers.length ? `<div class="oc-task-blockers">${elig.blockers.map(b => `<div class="oc-blocker-line">⚠ ${escapeHTML(b)}</div>`).join("")}</div>` : ""}
+      ${lastResult}
+      <div class="oc-task-actions">
+        <button class="btn-mini" data-oc-approve="${escapeHTML(d.id)}">${approval === OC_APPROVAL.APPROVED ? "Re-Approve / Review" : "Approve for OpenClaw"}</button>
+        ${approval === OC_APPROVAL.APPROVED ? `<button class="btn-mini btn-danger" data-oc-revoke="${escapeHTML(taskId)}">Revoke</button>` : ""}
+        <button class="btn-mini" data-oc-copy-packet="${escapeHTML(pktKey)}">Copy Task Packet</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function renderOCRunLog() {
+  const el = $("#oc-run-log");
+  if (!el) return;
+  if (!openclawState.runLog.length) {
+    el.innerHTML = `<p class="oc-empty">No runs logged yet.</p>`;
+    return;
+  }
+  const rows = openclawState.runLog.map(entry => {
+    const rc = ["PASS","SESSION_HEALTHY","SUCCESS","COMPLETE"].includes(entry.result) ? "oc-res-pass"
+      : ["FAIL","ERROR","BLOCKED"].includes(entry.result) ? "oc-res-fail" : "oc-res-unknown";
+    const statusChange = entry.status_before !== entry.status_after
+      ? `${escapeHTML(entry.status_before)} → ${escapeHTML(entry.status_after)}`
+      : escapeHTML(entry.status_before || "—");
+    return `<tr>
+      <td><code class="oc-code oc-code-sm">${escapeHTML(entry.run_id)}</code></td>
+      <td><code class="oc-code oc-code-sm">${escapeHTML(entry.task_id)}</code></td>
+      <td>${escapeHTML(entry.runbook_id)}</td>
+      <td class="oc-ts">${escapeHTML(entry.timestamp)}</td>
+      <td><span class="oc-res-badge ${rc}">${escapeHTML(entry.result)}</span></td>
+      <td>${statusChange}</td>
+      <td>${escapeHTML(entry.blocker || "None")}</td>
+      <td>${escapeHTML(entry.notes || "")}</td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `<p class="oc-log-count">${openclawState.runLog.length} run${openclawState.runLog.length !== 1 ? "s" : ""} logged</p>
+    <div class="oc-table-wrap">
+      <table class="oc-log-table">
+        <thead><tr><th>run_id</th><th>task_id</th><th>runbook_id</th><th>timestamp</th><th>result</th><th>status</th><th>blocker</th><th>notes</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+/* ---- Card OC section (shown on deliverable cards for mapped platforms) ---- */
+
+function renderCardOCSection(d) {
+  const key = ocAccountKey(d.platform);
+  if (!key) return "";
+  const taskId = ocTaskId(d);
+  const ov = openclawState.taskOverrides[taskId] || {};
+  const elig = ocEligibility(d);
+  const approval = ov.approval_status || OC_APPROVAL.NOT_READY;
+  const approvalCls = approval === OC_APPROVAL.APPROVED ? "oc-appr-approved"
+    : approval === OC_APPROVAL.REVOKED ? "oc-appr-revoked"
+    : "oc-appr-pending";
+
+  return `<div class="card-oc-section">
+    <div class="card-oc-row">
+      <span class="card-oc-label">OpenClaw</span>
+      <span class="oc-appr-badge ${approvalCls} oc-badge-sm">${escapeHTML(approval)}</span>
+      <span class="oc-exec-badge ${elig.executable ? "oc-exec-yes" : "oc-exec-no"} oc-badge-sm">${elig.executable ? "EXECUTABLE" : "BLOCKED"}</span>
+      <button class="btn-mini btn-oc-approve" data-oc-approve="${escapeHTML(d.id)}">${approval === OC_APPROVAL.APPROVED ? "Review / Re-Approve" : "Approve for OpenClaw"}</button>
+      ${approval === OC_APPROVAL.APPROVED ? `<button class="btn-mini btn-danger btn-oc-revoke" data-oc-revoke="${escapeHTML(taskId)}">Revoke</button>` : ""}
+    </div>
+  </div>`;
+}
+
+/* Expose for external callers (future direct-injection path) */
+window.SovereignOpenClaw = {
+  importResultPacket: function(text) {
+    try {
+      const pkt = ocParseResultPacket(text);
+      const d   = ocValidateResultPacket(pkt);
+      ocApplyResultPacket(pkt, d);
+      renderOpenClawTab();
+      renderSections();
+      return { ok: true, code: "RESULT_IMPORTED" };
+    } catch(err) {
+      return { ok: false, code: err.code || "RESULT_REJECTED_INVALID_PACKET", message: err.message };
+    }
+  }
+};
 
 document.addEventListener("DOMContentLoaded", init);

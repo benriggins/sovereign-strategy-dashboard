@@ -39,6 +39,7 @@
     <nav class="tab-nav" role="tablist">
       <button class="tab-btn tab-active" data-tab="deliverables" role="tab">Deliverables</button>
       <button class="tab-btn" data-tab="flow" role="tab">Flow</button>
+      <button class="tab-btn" data-tab="openclaw" role="tab">OpenClaw</button>
     </nav>
 
     <!-- ============ DELIVERABLES TAB ============ -->
@@ -204,6 +205,68 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
       </section>
       <div id="fl-shortform-content" class="fl-content" style="display:none;"></div>
     </div><!-- /#flow-tab-content -->
+
+    <!-- ============ OPENCLAW TAB ============ -->
+    <div id="openclaw-tab-content" style="display:none;">
+
+      <!-- Account Registry -->
+      <section class="panel oc-panel">
+        <span class="panel-label">Account Registry</span>
+        <p class="oc-panel-desc">All routing labels for browser profiles and destination accounts. Session status is updated via OpenClaw result packets.</p>
+        <div id="oc-account-registry"></div>
+      </section>
+
+      <!-- Task Queue -->
+      <section class="panel oc-panel">
+        <span class="panel-label">OpenClaw Queue</span>
+        <p class="oc-panel-desc">Tasks derived from current Deliverables tab. Refresh by re-importing a Claude packet. Only platforms with account mappings appear here.</p>
+        <div class="oc-queue-filters">
+          <button class="oc-filter-btn oc-filter-active" data-filter="ready">Ready (0)</button>
+          <button class="oc-filter-btn" data-filter="blocked">Blocked (0)</button>
+          <button class="oc-filter-btn" data-filter="all">All (0)</button>
+        </div>
+        <div id="oc-task-queue"></div>
+      </section>
+
+      <!-- Result Import -->
+      <section class="panel oc-panel">
+        <span class="panel-label">OpenClaw Result Import</span>
+        <p class="oc-panel-desc">Paste an <code>BEGIN_OPENCLAW_RESULT_V1</code> packet here. The dashboard validates it, updates only allowed fields, and appends a run log entry. OpenClaw may never update content, approval, or account fields.</p>
+        <textarea id="oc-result-box" class="import-box oc-import-box"
+          placeholder="BEGIN_OPENCLAW_RESULT_V1&#10;{&#10;  &quot;run_id&quot;: &quot;oc_run_20260629_001&quot;,&#10;  &quot;task_id&quot;: &quot;oc_linkedin_james_post_...&quot;,&#10;  &quot;runbook_id&quot;: &quot;006_SESSION_HEALTH_PREFLIGHT&quot;,&#10;  &quot;account_key&quot;: &quot;linkedin_james_personal&quot;,&#10;  &quot;browser_profile&quot;: &quot;linkedin-james&quot;,&#10;  &quot;result&quot;: &quot;SESSION_HEALTHY&quot;,&#10;  &quot;status_before&quot;: &quot;Approved&quot;,&#10;  &quot;status_after&quot;: &quot;Approved&quot;,&#10;  &quot;last_openclaw_checked_at&quot;: &quot;2026-06-29T13:20:00-07:00&quot;,&#10;  &quot;last_openclaw_result&quot;: &quot;PASS&quot;,&#10;  &quot;blocker&quot;: &quot;None&quot;,&#10;  &quot;notes&quot;: &quot;Session health preflight passed.&quot;&#10;}&#10;END_OPENCLAW_RESULT_V1"></textarea>
+        <div class="import-buttons">
+          <button id="btn-oc-result-import" class="btn btn-primary">Import Result</button>
+          <button id="btn-oc-result-clear" class="btn">Clear</button>
+        </div>
+        <div id="oc-result-message" class="oc-result-message" style="display:none;"></div>
+      </section>
+
+      <!-- Run Log -->
+      <section class="panel oc-panel">
+        <div class="oc-run-log-header">
+          <span class="panel-label">Run Log</span>
+          <button id="btn-oc-clear-log" class="btn btn-sm">Clear Log</button>
+        </div>
+        <div id="oc-run-log"></div>
+      </section>
+
+    </div><!-- /#openclaw-tab-content -->
+
+    <!-- ============ OPENCLAW APPROVAL MODAL ============ -->
+    <div id="oc-approval-modal" class="oc-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="oc-modal-title">
+      <div class="oc-modal-content">
+        <div class="oc-modal-header">
+          <h2 class="oc-modal-title" id="oc-modal-title">OpenClaw Approval Preview</h2>
+          <button class="oc-modal-close" id="oc-modal-close" aria-label="Close">×</button>
+        </div>
+        <div id="oc-modal-body" class="oc-modal-body"></div>
+        <div class="oc-modal-footer">
+          <button id="oc-modal-confirm" class="btn btn-primary">Confirm Approval</button>
+          <button id="oc-modal-revoke" class="btn btn-danger" style="display:none;">Revoke Approval</button>
+          <button id="oc-modal-cancel" class="btn">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <footer class="footer">
       <span>Sovereign Strategy Deliverables Dashboard — static, local, no backend.</span>
