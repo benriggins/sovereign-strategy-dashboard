@@ -2032,6 +2032,48 @@ function init() {
   $("#oc-approval-modal").addEventListener("click", e => {
     if (e.target === $("#oc-approval-modal")) ocCloseModal();
   });
+
+  // Carousel tab
+  loadCarousel();
+  renderCarouselTab();
+
+  $("#btn-cr-import").addEventListener("click", () => {
+    const raw = $("#cr-import-box").value.trim();
+    if (!raw) { showMessage("Nothing to import.", "warn"); return; }
+    try {
+      carouselState = parseCarouselPacket(raw);
+      saveCarousel();
+      renderCarouselTab();
+      const a = (carouselState.carousel_a?.slide_map?.length || 0);
+      const b = (carouselState.carousel_b?.slide_map?.length || 0);
+      showMessage(`Carousel packet imported: ${a + b} slides total (A: ${a}, B: ${b}).`, "success");
+    } catch(err) {
+      showMessage("Could not parse Carousel packet — check the JSON format.", "error");
+    }
+  });
+
+  $("#btn-cr-clear").addEventListener("click", () => {
+    if (!confirm("Clear the carousel packet?")) return;
+    carouselState = null;
+    try { localStorage.removeItem(CAROUSEL_STORAGE_KEY); } catch(e) {}
+    $("#cr-import-box").value = "";
+    renderCarouselTab();
+    showMessage("Carousel packet cleared.", "info");
+  });
+
+  // Manus permanent skill hero copy
+  $("#btn-cr-copy-manus-skill").addEventListener("click", e => {
+    const text = carouselState?.manus_permanent_skill;
+    if (text) copyToClipboard(text, e.currentTarget, "Copy Manus Permanent Skill");
+  });
+
+  // All carousel copy buttons (data-crkb)
+  $("#carousels-tab-content").addEventListener("click", e => {
+    const btn = e.target.closest("[data-crkb]");
+    if (!btn) return;
+    const text = crCopyReg[btn.dataset.crkb];
+    if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
+  });
 }
 
 
@@ -2045,7 +2087,9 @@ function initTabs() {
       $("#deliverables-tab-content").style.display  = target === "deliverables" ? "" : "none";
       $("#flow-tab-content").style.display          = target === "flow"         ? "" : "none";
       $("#openclaw-tab-content").style.display      = target === "openclaw"     ? "" : "none";
-      if (target === "openclaw") renderOpenClawTab();
+      $("#carousels-tab-content").style.display     = target === "carousels"    ? "" : "none";
+      if (target === "openclaw")  renderOpenClawTab();
+      if (target === "carousels") renderCarouselTab();
     });
   });
 }
@@ -3350,6 +3394,185 @@ function renderCardOCSection(d) {
       ${approval === OC_APPROVAL.APPROVED ? `<button class="btn-mini btn-danger btn-oc-revoke" data-oc-revoke="${escapeHTML(taskId)}">Revoke</button>` : ""}
     </div>
   </div>`;
+}
+
+/* =========================================================================
+ * SOVEREIGN_CAROUSEL_V1 — Step 14 carousel production dashboard
+ * Two carousel packages (A + B) plus a stable Manus permanent skill.
+ * Import via BEGIN_SOVEREIGN_CAROUSEL_V1 … END_SOVEREIGN_CAROUSEL_V1.
+ * ========================================================================= */
+
+const CAROUSEL_STORAGE_KEY = "sovereign_carousel_v1";
+let   carouselState        = null;
+let   crCopyReg            = {};
+let   crKeySeq             = 0;
+
+function crReg(content) {
+  const k = "cr_" + (++crKeySeq);
+  crCopyReg[k] = content;
+  return k;
+}
+
+function parseCarouselPacket(raw) {
+  const OPEN  = "BEGIN_SOVEREIGN_CAROUSEL_V1";
+  const CLOSE = "END_SOVEREIGN_CAROUSEL_V1";
+  let text = raw.trim();
+  const s = text.indexOf(OPEN);
+  const e = text.indexOf(CLOSE);
+  if (s !== -1 && e !== -1) text = text.slice(s + OPEN.length, e).trim();
+  return JSON.parse(text);
+}
+
+function saveCarousel() {
+  try { localStorage.setItem(CAROUSEL_STORAGE_KEY, JSON.stringify(carouselState)); } catch(err) {}
+}
+function loadCarousel() {
+  try { const r = localStorage.getItem(CAROUSEL_STORAGE_KEY); if (r) carouselState = JSON.parse(r); } catch(err) {}
+}
+
+/* ---- Carousel render helpers ---- */
+
+function crBlock(label, text, large) {
+  if (!text) return "";
+  const str = Array.isArray(text) ? text.join("\n") : String(text);
+  const k = crReg(str);
+  return `<div class="cr-block">
+    <div class="cr-block-header">
+      <span class="cr-block-label">${escapeHTML(label)}</span>
+      <button class="fl-copy-btn fl-copy-btn-sm" data-crkb="${k}" data-label="Copy">Copy</button>
+    </div>
+    <textarea class="cr-block-textarea${large ? " cr-block-textarea-lg" : ""}" readonly>${escapeHTML(str)}</textarea>
+  </div>`;
+}
+
+function crChip(label, text) {
+  if (!text) return "";
+  const str = Array.isArray(text) ? text.join("  ") : String(text);
+  const k = crReg(str);
+  return `<div class="cr-chip-row">
+    <span class="cr-chip-label">${escapeHTML(label)}</span>
+    <code class="cr-chip-code">${escapeHTML(str)}</code>
+    <button class="fl-copy-btn fl-copy-btn-xs" data-crkb="${k}" data-label="Copy">Copy</button>
+  </div>`;
+}
+
+const CR_VT_CLASS = {
+  PRODUCT_REF:        "cr-vt-product",
+  FAILURE_UNBRANDED:  "cr-vt-failure",
+  DIAGRAM:            "cr-vt-diagram",
+  CAD_3D:             "cr-vt-diagram",
+  TABLE_MATRIX:       "cr-vt-matrix",
+  BLUEPRINT_CARD:     "cr-vt-matrix",
+  SPEC_CROP:          "cr-vt-matrix",
+  ANNOTATED_PHOTO:    "cr-vt-annotated",
+  TEXT_POSTER:        "cr-vt-text",
+};
+
+function renderCarouselSlide(s) {
+  if (!s) return "";
+  const vt = (s.visual_type || "").toUpperCase();
+  const vtClass = CR_VT_CLASS[vt] || "";
+  const vtBadge = vt ? `<span class="cr-visual-badge ${vtClass}">${escapeHTML(s.visual_type)}</span>` : "";
+  const refInfo = s.ref
+    ? `<div class="cr-slide-ref">Ref: <strong>${escapeHTML(s.ref)}</strong>${s.ref_file ? ` — ${escapeHTML(s.ref_file)}` : ""}</div>`
+    : "";
+  const bpKey  = s.image_blueprint ? crReg(s.image_blueprint) : "";
+  const bpHTML = s.image_blueprint ? `<div class="cr-block cr-bp-block">
+    <div class="cr-block-header">
+      <span class="cr-block-label">Image Blueprint</span>
+      <button class="fl-copy-btn fl-copy-btn-xs" data-crkb="${bpKey}" data-label="Copy">Copy</button>
+    </div>
+    <textarea class="cr-block-textarea cr-bp-textarea" readonly>${escapeHTML(s.image_blueprint)}</textarea>
+  </div>` : "";
+  const standAlone = s.standalone_statement
+    ? `<div class="cr-standalone"><span class="cr-standalone-label">Standalone:</span> ${escapeHTML(s.standalone_statement)}</div>`
+    : "";
+
+  return `<div class="cr-slide-card">
+    <div class="cr-slide-card-header">
+      <span class="cr-slide-num">Slide ${s.slide ?? "?"}</span>
+      <span class="cr-slide-job">${escapeHTML(s.job || "")}</span>
+      ${vtBadge}
+    </div>
+    <div class="cr-slide-headline">${escapeHTML(s.headline || "")}</div>
+    ${s.copy ? `<div class="cr-slide-copy">${escapeHTML(s.copy)}</div>` : ""}
+    ${refInfo}
+    ${bpHTML}
+    ${standAlone}
+  </div>`;
+}
+
+function renderCarouselBox(c, label) {
+  if (!c) return "";
+  const typeBadge   = c.carousel_type ? `<span class="cr-type-badge">${escapeHTML(c.carousel_type)}</span>` : "";
+  const viralFilter = c.viral_filter  ? `<div class="cr-viral-filter">${escapeHTML(c.viral_filter)}</div>`  : "";
+  const hook        = c.hook          ? `<blockquote class="cr-hook">${escapeHTML(c.hook)}</blockquote>`     : "";
+  const slides      = (c.slide_map || []);
+  const slidesHTML  = slides.map(renderCarouselSlide).join("");
+  const igHashtags  = Array.isArray(c.instagram_hashtags)
+    ? c.instagram_hashtags.join("  ")
+    : (c.instagram_hashtags || "");
+
+  return `<div class="cr-carousel-box">
+    <div class="cr-carousel-box-header">
+      <span class="cr-carousel-box-label">${escapeHTML(label)}</span>
+      ${typeBadge}
+    </div>
+    ${viralFilter}
+    ${hook}
+
+    <div class="cr-slides-section">
+      <div class="cr-slides-section-label">Slide Map — ${slides.length} slide${slides.length !== 1 ? "s" : ""}</div>
+      <div class="cr-slide-map">${slidesHTML}</div>
+    </div>
+
+    <div class="cr-production-section">
+      ${crBlock("Reference Image Sourcing Brief — gather these before running Manus", c.reference_image_brief, true)}
+      ${crBlock("Manus Prompt — paste into Manus Chat (all slides sequential)", c.manus_prompt, true)}
+    </div>
+
+    <div class="cr-platform-section">
+      <div class="cr-platform-header">Instagram</div>
+      ${crBlock("Instagram Caption", c.instagram_caption)}
+      ${igHashtags ? crChip("Instagram Hashtags", igHashtags) : ""}
+    </div>
+
+    <div class="cr-platform-section">
+      <div class="cr-platform-header">LinkedIn</div>
+      ${crBlock("LinkedIn Writeup", c.linkedin_writeup)}
+    </div>
+
+    <div class="cr-chips-row">
+      ${c.pdf_title ? crChip("PDF Title for LinkedIn", c.pdf_title) : ""}
+      ${c.seo_slug  ? crChip("SEO Slug", c.seo_slug)               : ""}
+    </div>
+  </div>`;
+}
+
+function renderCarouselTab() {
+  const manusPanel = $("#cr-manus-skill-panel");
+  const content    = $("#cr-content");
+  if (!carouselState) {
+    if (manusPanel) manusPanel.style.display = "none";
+    if (content)  { content.style.display = "none"; content.innerHTML = ""; }
+    return;
+  }
+
+  // Manus permanent skill
+  if (carouselState.manus_permanent_skill && manusPanel) {
+    const ta = $("#cr-manus-skill-textarea");
+    if (ta) ta.value = carouselState.manus_permanent_skill;
+    manusPanel.style.display = "";
+  }
+
+  // Reset copy registry before re-rendering
+  Object.keys(crCopyReg).forEach(k => delete crCopyReg[k]);
+  crKeySeq = 0;
+
+  content.innerHTML =
+    renderCarouselBox(carouselState.carousel_a, "Carousel A") +
+    renderCarouselBox(carouselState.carousel_b, "Carousel B");
+  content.style.display = "";
 }
 
 /* Expose for external callers (future direct-injection path) */

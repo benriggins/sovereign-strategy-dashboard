@@ -40,6 +40,7 @@
       <button class="tab-btn tab-active" data-tab="deliverables" role="tab">Deliverables</button>
       <button class="tab-btn" data-tab="flow" role="tab">Flow</button>
       <button class="tab-btn" data-tab="openclaw" role="tab">OpenClaw</button>
+      <button class="tab-btn" data-tab="carousels" role="tab">Carousels</button>
     </nav>
 
     <!-- ============ DELIVERABLES TAB ============ -->
@@ -251,6 +252,36 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
       </section>
 
     </div><!-- /#openclaw-tab-content -->
+
+    <!-- ============ CAROUSELS TAB ============ -->
+    <div id="carousels-tab-content" style="display:none;">
+
+      <!-- Manus Permanent Skill — shown once, pinned at top after first import -->
+      <div id="cr-manus-skill-panel" class="panel cr-manus-panel" style="display:none;">
+        <span class="panel-label">Manus Permanent Skill — paste once into Manus Instructions panel per session</span>
+        <p class="cr-manus-desc">This never changes per run. Paste it into the Manus Instructions panel once at the start of every Manus session, before pasting any carousel prompt.</p>
+        <div class="cr-block-header">
+          <button id="btn-cr-copy-manus-skill" class="btn btn-primary cr-copy-hero-btn">Copy Manus Permanent Skill</button>
+        </div>
+        <textarea id="cr-manus-skill-textarea" class="import-box cr-textarea-lg" readonly></textarea>
+      </div>
+
+      <!-- Import panel -->
+      <section class="panel cr-import-panel">
+        <span class="panel-label">Paste Carousel V1 Packet</span>
+        <p class="cr-import-desc">Paste a <code>BEGIN_SOVEREIGN_CAROUSEL_V1</code> packet — the output of the Step 14 carousel pipeline. Contains two complete carousel packages (<code>carousel_a</code> + <code>carousel_b</code>) and the permanent Manus skill. Paste multiple campaigns sequentially — each import replaces the previous.</p>
+        <textarea id="cr-import-box" class="import-box cr-import-box"
+          placeholder="BEGIN_SOVEREIGN_CAROUSEL_V1&#10;{ ... }&#10;END_SOVEREIGN_CAROUSEL_V1"></textarea>
+        <div class="import-buttons">
+          <button id="btn-cr-import" class="btn btn-primary">Import Carousel Packet</button>
+          <button id="btn-cr-clear" class="btn">Clear Carousels</button>
+        </div>
+      </section>
+
+      <!-- Rendered carousel content -->
+      <div id="cr-content" style="display:none;"></div>
+
+    </div><!-- /#carousels-tab-content -->
 
     <!-- ============ OPENCLAW APPROVAL MODAL ============ -->
     <div id="oc-approval-modal" class="oc-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="oc-modal-title">
