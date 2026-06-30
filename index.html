@@ -39,7 +39,8 @@
     <nav class="tab-nav" role="tablist">
       <button class="tab-btn tab-active" data-tab="deliverables" role="tab">Deliverables</button>
       <button class="tab-btn" data-tab="flow" role="tab">Flow</button>
-      <button class="tab-btn" data-tab="openclaw" role="tab">OpenClaw</button>
+      <button class="tab-btn" data-tab="execution" role="tab">Execution</button>
+      <button class="tab-btn" data-tab="openclaw" role="tab">OpenClaw (Legacy)</button>
       <button class="tab-btn" data-tab="carousels" role="tab">Carousels</button>
     </nav>
 
@@ -252,6 +253,111 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
       </section>
 
     </div><!-- /#openclaw-tab-content -->
+
+    <!-- ============ EXECUTION TAB ============ -->
+    <div id="execution-tab-content" style="display:none;">
+
+      <!-- Executor selector + status bar -->
+      <section class="panel ex-header-panel">
+        <div class="ex-header-row">
+          <div class="ex-header-left">
+            <span class="panel-label">Execution Layer</span>
+            <p class="ex-header-desc">Executor-agnostic task runner. Hermes is the primary executor. OpenClaw is legacy/fallback. Paste a <code>SOVEREIGN_EXECUTION_PACKET_V1</code> to load a task.</p>
+          </div>
+          <div class="ex-executor-selector">
+            <span class="ex-executor-label">Executor</span>
+            <div class="ex-executor-btns">
+              <button class="ex-exec-btn ex-exec-active" data-executor="hermes">Hermes</button>
+              <button class="ex-exec-btn" data-executor="openclaw">OpenClaw</button>
+              <button class="ex-exec-btn" data-executor="manual">Manual</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Packet import -->
+      <section class="panel ex-import-panel">
+        <span class="panel-label">Paste Execution Packet</span>
+        <p class="ex-import-desc">Paste a <code>SOVEREIGN_EXECUTION_PACKET_V1</code> packet (with or without <code>BEGIN/END</code> wrappers). The dashboard validates all required fields and displays a preview card.</p>
+        <textarea id="ex-import-box" class="import-box ex-import-box"
+          placeholder="BEGIN_SOVEREIGN_EXECUTION_PACKET_V1&#10;{&#10;  &quot;schema&quot;: &quot;SOVEREIGN_EXECUTION_PACKET_V1&quot;,&#10;  &quot;task_id&quot;: &quot;LINKEDIN_JAMES_DRY_RUN_001&quot;,&#10;  &quot;approval_status&quot;: &quot;BENJAMIN_APPROVED&quot;,&#10;  &quot;run_mode&quot;: &quot;DRY_RUN_READINESS_ONLY&quot;,&#10;  &quot;executor&quot;: &quot;hermes&quot;,&#10;  ...&#10;}&#10;END_SOVEREIGN_EXECUTION_PACKET_V1"></textarea>
+        <div class="import-buttons">
+          <button id="btn-ex-import" class="btn btn-primary">Load Packet</button>
+          <button id="btn-ex-clear-packet" class="btn">Clear Packet</button>
+          <button id="btn-ex-copy-packet" class="btn btn-ghost" style="display:none;">Copy Packet JSON</button>
+        </div>
+      </section>
+
+      <!-- Packet preview card — shown after import -->
+      <div id="ex-packet-preview" style="display:none;">
+
+        <!-- Approval gate banner -->
+        <div id="ex-approval-gate" class="ex-gate ex-gate-unknown">
+          <span id="ex-gate-icon" class="ex-gate-icon"></span>
+          <div>
+            <div id="ex-gate-title" class="ex-gate-title"></div>
+            <div id="ex-gate-desc" class="ex-gate-desc"></div>
+          </div>
+        </div>
+
+        <!-- Run mode badge -->
+        <div id="ex-run-mode-box" class="ex-run-mode-box">
+          <span id="ex-run-mode-badge" class="ex-run-mode-badge"></span>
+          <span id="ex-run-mode-desc" class="ex-run-mode-desc"></span>
+        </div>
+
+        <!-- Task routing card -->
+        <div class="panel ex-routing-panel">
+          <span class="panel-label">Task Routing</span>
+          <div id="ex-routing-grid" class="ex-routing-grid"></div>
+        </div>
+
+        <!-- Validation checklist -->
+        <div class="panel ex-validation-panel">
+          <span class="panel-label">Validation</span>
+          <div id="ex-validation-list" class="ex-validation-list"></div>
+        </div>
+
+        <!-- Hard stops -->
+        <div id="ex-hard-stops-panel" class="panel ex-hard-stops-panel" style="display:none;">
+          <span class="panel-label ex-hard-stops-label">Hard Stops</span>
+          <ol id="ex-hard-stops-list" class="ex-hard-stops-list"></ol>
+        </div>
+
+        <!-- Hermes prompt block -->
+        <div class="panel ex-prompt-panel">
+          <span class="panel-label">Hermes Prompt — paste this to start execution</span>
+          <div class="ex-prompt-actions">
+            <button id="btn-ex-copy-hermes-prompt" class="btn btn-primary">Copy Hermes Prompt</button>
+          </div>
+          <div id="ex-hermes-prompt-display" class="ex-hermes-prompt-display"></div>
+        </div>
+
+      </div><!-- /#ex-packet-preview -->
+
+      <!-- Result import -->
+      <section class="panel ex-result-panel">
+        <span class="panel-label">Result Import — paste Hermes result packet</span>
+        <p class="ex-import-desc">Paste a <code>BEGIN_EXECUTION_RESULT_V1</code> packet returned by Hermes. The dashboard validates it and appends it to the run log.</p>
+        <textarea id="ex-result-box" class="import-box ex-import-box"
+          placeholder="BEGIN_EXECUTION_RESULT_V1&#10;{&#10;  &quot;executor&quot;: &quot;hermes&quot;,&#10;  &quot;task_id&quot;: &quot;...&quot;,&#10;  &quot;status&quot;: &quot;dry_run_complete | blocked | failed | success&quot;,&#10;  ...&#10;}&#10;END_EXECUTION_RESULT_V1"></textarea>
+        <div class="import-buttons">
+          <button id="btn-ex-result-import" class="btn btn-primary">Import Result</button>
+          <button id="btn-ex-result-clear" class="btn">Clear</button>
+        </div>
+        <div id="ex-result-message" class="ex-result-message" style="display:none;"></div>
+      </section>
+
+      <!-- Run log -->
+      <section class="panel ex-runlog-panel">
+        <div class="ex-runlog-header">
+          <span class="panel-label">Run Log</span>
+          <button id="btn-ex-clear-log" class="btn btn-sm">Clear Log</button>
+        </div>
+        <div id="ex-run-log"></div>
+      </section>
+
+    </div><!-- /#execution-tab-content -->
 
     <!-- ============ CAROUSELS TAB ============ -->
     <div id="carousels-tab-content" style="display:none;">

@@ -2074,6 +2074,91 @@ function init() {
     const text = crCopyReg[btn.dataset.crkb];
     if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
   });
+
+  // ---- Execution tab ----
+  loadExecution();
+  renderExecutionTab();
+
+  // Executor selector
+  $("#execution-tab-content").addEventListener("click", e => {
+    const execBtn = e.target.closest(".ex-exec-btn");
+    if (execBtn) {
+      $all(".ex-exec-btn").forEach(b => b.classList.toggle("ex-exec-active", b === execBtn));
+      exSelectedExecutor = execBtn.dataset.executor;
+      if (exPacketState) renderExecutionPacketPreview(exPacketState);
+      return;
+    }
+  });
+
+  $("#btn-ex-import").addEventListener("click", () => {
+    const raw = $("#ex-import-box").value.trim();
+    if (!raw) { showMessage("Nothing to import.", "warn"); return; }
+    try {
+      const pkt = exParsePacket(raw);
+      const errs = exValidatePacket(pkt);
+      exPacketState = pkt;
+      saveExecution();
+      renderExecutionPacketPreview(pkt, errs);
+      $("#btn-ex-copy-packet").style.display = "";
+      const valid = errs.length === 0;
+      showMessage(valid ? `Execution packet loaded: ${pkt.task_id}` : `Packet loaded with ${errs.length} validation issue(s).`, valid ? "success" : "warn");
+    } catch(err) {
+      showMessage("Could not parse packet — check the JSON format. " + err.message, "error");
+    }
+  });
+
+  $("#btn-ex-clear-packet").addEventListener("click", () => {
+    exPacketState = null;
+    saveExecution();
+    $("#ex-import-box").value = "";
+    $("#ex-packet-preview").style.display = "none";
+    $("#btn-ex-copy-packet").style.display = "none";
+    showMessage("Execution packet cleared.", "info");
+  });
+
+  $("#btn-ex-copy-packet").addEventListener("click", e => {
+    if (exPacketState) copyToClipboard(JSON.stringify(exPacketState, null, 2), e.currentTarget, "Copy Packet JSON");
+  });
+
+  $("#btn-ex-copy-hermes-prompt").addEventListener("click", e => {
+    if (exPacketState) copyToClipboard(exBuildHermesPrompt(exPacketState), e.currentTarget, "Copy Hermes Prompt");
+  });
+
+  $("#btn-ex-result-import").addEventListener("click", () => {
+    const raw = $("#ex-result-box").value.trim();
+    const msgEl = $("#ex-result-message");
+    msgEl.style.display = "none";
+    if (!raw) { showMessage("Nothing to import.", "warn"); return; }
+    try {
+      const result = exParseResult(raw);
+      exAppendRunLog(result);
+      saveExecution();
+      renderExRunLog();
+      msgEl.className = "ex-result-message ex-result-ok";
+      msgEl.textContent = "✓ Result imported — " + (result.task_id || "unknown task") + " — " + (result.status || "?");
+      msgEl.style.display = "";
+      showMessage("Execution result imported.", "success");
+    } catch(err) {
+      msgEl.className = "ex-result-message ex-result-err";
+      msgEl.textContent = "✗ Could not parse result: " + err.message;
+      msgEl.style.display = "";
+      showMessage("Result import failed: " + err.message, "error");
+    }
+  });
+
+  $("#btn-ex-result-clear").addEventListener("click", () => {
+    $("#ex-result-box").value = "";
+    const msgEl = $("#ex-result-message");
+    msgEl.style.display = "none";
+  });
+
+  $("#btn-ex-clear-log").addEventListener("click", () => {
+    if (!confirm("Clear the execution run log?")) return;
+    exRunLog = [];
+    saveExecution();
+    renderExRunLog();
+    showMessage("Run log cleared.", "info");
+  });
 }
 
 
@@ -2088,8 +2173,10 @@ function initTabs() {
       $("#flow-tab-content").style.display          = target === "flow"         ? "" : "none";
       $("#openclaw-tab-content").style.display      = target === "openclaw"     ? "" : "none";
       $("#carousels-tab-content").style.display     = target === "carousels"    ? "" : "none";
+      $("#execution-tab-content").style.display     = target === "execution"    ? "" : "none";
       if (target === "openclaw")  renderOpenClawTab();
       if (target === "carousels") renderCarouselTab();
+      if (target === "execution") renderExecutionTab();
     });
   });
 }
