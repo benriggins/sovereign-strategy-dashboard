@@ -175,8 +175,8 @@ const PLATFORM_ABBREV = {
   "Solutions Hub | Blog":         "Sol Blog",
   "Industries Hub | Pillar":      "Ind Pillar",
   "Industries Hub | Application": "Ind App",
-  "Manufacturers Hub | Pillar":        "Prod Pillar",
-  "Manufacturers Hub | Product Page":  "Prod Page",
+  "Manufacturers Hub | Pillar":        "Mfr Pillar",
+  "Manufacturers Hub | Product Page":  "Mfr Page",
   "Webpage":                      "Webpage",
   "Product Page":                 "Product Pg",
   "Blog":                         "Blog",
@@ -212,7 +212,7 @@ const WEBSITE_HUB_CONFIG = [
     platforms: new Set(["Industries Hub | Pillar", "Industries Hub | Application"])
   },
   {
-    name: "Products Hub",
+    name: "Manufacturers Hub",
     pillarPlatforms: new Set(["Manufacturers Hub | Pillar"]),
     platforms: new Set(["Manufacturers Hub | Pillar", "Manufacturers Hub | Product Page", "Product Page"])
   }
@@ -3731,6 +3731,147 @@ function renderCarouselTab() {
 }
 
 /* =========================================================================
+ * TAB SWITCHING HELPER
+ * ========================================================================= */
+
+function switchTab(target) {
+  const btn = document.querySelector(`.tab-btn[data-tab="${target}"]`);
+  if (btn) btn.click();
+}
+
+/* =========================================================================
+ * GLOBAL ATTENTION BAR
+ * Always visible above the tab nav. Shows Benjamin what needs his attention
+ * right now — Hermes blockers and tasks awaiting approval — regardless of
+ * which tab is active. Updated after every state change.
+ * ========================================================================= */
+
+function renderAttentionBar() {
+  const bar = document.getElementById("global-attention-bar");
+  if (!bar) return;
+
+  const items = [];
+
+  // ── Hermes blockers ──────────────────────────────────────────────────────
+  // Find task_ids where the most recent run log entry is blocked/failed/needs_input
+  // (i.e., not subsequently resolved by a success entry).
+  const latestByTask = new Map();
+  [...exRunLog].reverse().forEach(r => {
+    if (r.task_id && !latestByTask.has(r.task_id)) latestByTask.set(r.task_id, r);
+  });
+  const activeBlockers = [...latestByTask.values()].filter(
+    r => r.status === "blocked" || r.status === "failed" || r.status === "needs_input"
+  );
+
+  if (activeBlockers.length > 0) {
+    const b = activeBlockers[0];
+    const more = activeBlockers.length > 1 ? ` +${activeBlockers.length - 1} more` : "";
+    items.push(`
+      <div class="gab-item gab-blocker">
+        <span class="gab-dot gab-dot-blocked"></span>
+        <div class="gab-text">
+          <span class="gab-label">Hermes blocked — your action needed${escapeHTML(more)}</span>
+          <span class="gab-detail">${escapeHTML(b.blocking_reason || b.notes || "No reason specified")} · ${escapeHTML(b.task_id || "")}</span>
+        </div>
+        <button class="btn btn-sm gab-action" data-gab-goto="execution">View</button>
+      </div>`);
+  }
+
+  // ── Pending approvals ─────────────────────────────────────────────────────
+  // Deliverables with an account mapping that Benjamin hasn't approved yet.
+  const pendingApprovals = (state.deliverables || []).filter(d => {
+    if (!ocAccountKey(d.platform)) return false;
+    const ov = openclawState.taskOverrides[ocTaskId(d)] || {};
+    return ov.approval_status !== OC_APPROVAL.APPROVED;
+  });
+
+  if (pendingApprovals.length > 0) {
+    items.push(`
+      <div class="gab-item gab-approval">
+        <span class="gab-dot gab-dot-approval"></span>
+        <div class="gab-text">
+          <span class="gab-label">${pendingApprovals.length} task${pendingApprovals.length !== 1 ? "s" : ""} awaiting your approval</span>
+          <span class="gab-detail">Approve in the OpenClaw tab to authorize Hermes to execute</span>
+        </div>
+        <button class="btn btn-sm gab-action" data-gab-goto="openclaw">Approve</button>
+      </div>`);
+  }
+
+  if (items.length === 0) {
+    bar.style.display = "none";
+    bar.innerHTML = "";
+    return;
+  }
+
+  bar.innerHTML = items.join("");
+  bar.style.display = "";
+
+  bar.querySelectorAll("[data-gab-goto]").forEach(btn => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.gabGoto));
+  });
+}
+
+/* =========================================================================
+ * MANUAL HANDOFF CHECKLIST
+ * Shown in the Execution tab prompt panel when executor = "manual".
+ * Benjamin follows these steps himself instead of Hermes.
+ * ========================================================================= */
+
+function buildManualHandoffChecklist(pkt) {
+  const lines = [
+    "MANUAL HANDOFF — Complete this task yourself",
+    "=".repeat(52),
+    "",
+    `Task:      ${pkt.task_id    || "—"}`,
+    `Platform:  ${pkt.platform   || "—"}`,
+    `Action:    ${pkt.action_type|| "—"}`,
+    "",
+    "ACCOUNT",
+    `  Key:     ${pkt.account_key     || "—"}`,
+    `  Profile: ${pkt.browser_profile || "—"}`,
+    "",
+    "STEPS",
+    `  1. Go to: ${pkt.destination_url || "[destination]"}`,
+    `  2. Confirm you are logged in as: ${pkt.account_key || "[account]"}`,
+    "  3. Open the post composer.",
+  ];
+
+  if (pkt.post_body_source) {
+    lines.push("  4. Paste this content VERBATIM — do not change a single character:");
+    lines.push("");
+    lines.push("---");
+    lines.push(pkt.post_body_source);
+    lines.push("---");
+    lines.push("");
+  } else {
+    lines.push("  4. Paste your approved content.");
+  }
+
+  const cta = pkt.cta_placement || "";
+  if (cta) {
+    lines.push(`  5. CTA rule: ${cta}`);
+    if (cta.includes("PINNED_COMMENT"))      lines.push("     → After posting, paste the lead magnet URL as the FIRST pinned comment.");
+    if (cta.includes("VIDEO_DESCRIPTION"))   lines.push("     → Include the lead magnet URL in the video description.");
+    if (cta.includes("HERO_MIDPAGE_FOOTER")) lines.push("     → Lead magnet CTA must appear in hero, mid-page, and footer.");
+  }
+
+  lines.push("  6. Do NOT alter any content — post verbatim.");
+  lines.push("  7. Publish.");
+  lines.push("");
+
+  if (Array.isArray(pkt.hard_stop) && pkt.hard_stop.length > 0) {
+    lines.push("HARD STOPS — obey all:");
+    pkt.hard_stop.forEach((s, i) => lines.push(`  ${i + 1}. ${s}`));
+    lines.push("");
+  }
+
+  lines.push("WHEN DONE");
+  lines.push("  Return a BEGIN_EXECUTION_RESULT_V1 packet to the dashboard with the live post URL.");
+
+  return lines.join("\n");
+}
+
+/* =========================================================================
  * MACHINE-READABLE STATE + SOVEREIGN DASHBOARD API
  * Keeps the <script type="application/json"> tags in sync after every
  * state change so Hermes (and any executor) can read the full dashboard
@@ -3773,6 +3914,9 @@ function updateMachineReadableState() {
     video_title: flowState.video_title || null,
     batch_count: (flowState.batches || []).length,
   } : { loaded: false });
+
+  // Keep the attention bar in sync on every state change
+  renderAttentionBar();
 
   // Dashboard manifest — everything Hermes needs to orient itself
   setTag("dashboard-manifest", {
@@ -3998,8 +4142,10 @@ const EX_RUN_MODES = {
   LIVE_EXECUTION_APPROVED: { label: "LIVE EXECUTION — AUTHORIZED",  cls: "ex-rm-live",     desc: "Full execution. Requires BENJAMIN_APPROVED + live_execution_explicit_flag: true." },
 };
 
-/* ---- Hermes prompt builder ---- */
+/* ---- Hermes prompt builder / Manual checklist ---- */
 function exBuildHermesPrompt(pkt) {
+  if (exSelectedExecutor === "manual") return buildManualHandoffChecklist(pkt);
+  // ── Hermes paths below ──
   const rm = pkt.run_mode || "DRY_RUN_READINESS_ONLY";
   const url = pkt.destination_url || "[destination_url]";
   const profile = pkt.browser_profile || "[browser_profile]";
