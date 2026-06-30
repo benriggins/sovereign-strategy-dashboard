@@ -375,7 +375,7 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
       <!-- Import panel -->
       <section class="panel cr-import-panel">
         <span class="panel-label">Paste Carousel V1 Packet</span>
-        <p class="cr-import-desc">Paste a <code>BEGIN_SOVEREIGN_CAROUSEL_V1</code> packet — the output of the Step 14 carousel pipeline. Contains two complete carousel packages (<code>carousel_a</code> + <code>carousel_b</code>) and the permanent Manus skill. Paste multiple campaigns sequentially — each import replaces the previous.</p>
+        <p class="cr-import-desc">Paste a <code>BEGIN_SOVEREIGN_CAROUSEL_V1</code> packet — the output of the Step 14 carousel pipeline. Contains two complete carousel packages (<code>carousel_a</code> + <code>carousel_b</code>) and the permanent Manus skill. Each import <strong>adds a new run</strong> — all campaigns accumulate below.</p>
         <textarea id="cr-import-box" class="import-box cr-import-box"
           placeholder="BEGIN_SOVEREIGN_CAROUSEL_V1&#10;{ ... }&#10;END_SOVEREIGN_CAROUSEL_V1"></textarea>
         <div class="import-buttons">
@@ -410,6 +410,14 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
     </footer>
 
   </div>
+
+  <!-- MACHINE-READABLE STATE — Hermes reads these via document.getElementById(id).textContent
+       Updated automatically after every import/clear. Never write to these manually. -->
+  <script id="dashboard-manifest"  type="application/json">{}</script>
+  <script id="execution-packet"    type="application/json">{}</script>
+  <script id="carousel-data"       type="application/json">[]</script>
+  <script id="deliverables-data"   type="application/json">{}</script>
+  <script id="flow-data"           type="application/json">{}</script>
 
   <script src="sample-data.js"></script>
   <script src="app.js"></script>

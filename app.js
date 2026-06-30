@@ -1143,6 +1143,7 @@ function importFromText(raw) {
   state.deliverables = accepted;
   save();
   render();
+  updateMachineReadableState();
 
   let msg = `Imported ${accepted.length} deliverable${accepted.length === 1 ? "" : "s"}.`;
   if (errors.length) {
@@ -1862,6 +1863,7 @@ function init() {
       flowState = parseFlowPacket(raw);
       saveFlow();
       renderFlow();
+      updateMachineReadableState();
       const clips = (flowState.batches || []).reduce((n, b) => n + (b.clips || []).length, 0);
       const batches = (flowState.batches || []).length;
       showMessage(`Flow packet imported: ${batches} batch${batches !== 1 ? "es" : ""}, ${clips} clip${clips !== 1 ? "s" : ""}.`, "success");
@@ -1876,6 +1878,7 @@ function init() {
     try { localStorage.removeItem(FLOW_STORAGE_KEY); } catch(e) {}
     $("#fl-import-box").value = "";
     renderFlow();
+    updateMachineReadableState();
     showMessage("Flow packet cleared.", "info");
   });
 
@@ -2041,38 +2044,71 @@ function init() {
     const raw = $("#cr-import-box").value.trim();
     if (!raw) { showMessage("Nothing to import.", "warn"); return; }
     try {
-      carouselState = parseCarouselPacket(raw);
+      const pkt = parseCarouselPacket(raw);
+      const run = {
+        id: "cr_run_" + Date.now(),
+        imported_at: new Date().toISOString(),
+        campaign_id: pkt.campaign_id || "",
+        manus_permanent_skill: pkt.manus_permanent_skill || "",
+        carousel_a: pkt.carousel_a || null,
+        carousel_b: pkt.carousel_b || null,
+      };
+      carouselRuns.unshift(run);
       saveCarousel();
       renderCarouselTab();
-      const a = (carouselState.carousel_a?.slide_map?.length || 0);
-      const b = (carouselState.carousel_b?.slide_map?.length || 0);
-      showMessage(`Carousel packet imported: ${a + b} slides total (A: ${a}, B: ${b}).`, "success");
+      updateMachineReadableState();
+      $("#cr-import-box").value = "";
+      const a = (run.carousel_a?.slide_map?.length || 0);
+      const b = (run.carousel_b?.slide_map?.length || 0);
+      showMessage(`Carousel run added: ${a + b} slides (A: ${a}, B: ${b}). ${carouselRuns.length} run${carouselRuns.length !== 1 ? "s" : ""} total.`, "success");
     } catch(err) {
       showMessage("Could not parse Carousel packet — check the JSON format.", "error");
     }
   });
 
   $("#btn-cr-clear").addEventListener("click", () => {
-    if (!confirm("Clear the carousel packet?")) return;
-    carouselState = null;
+    if (!confirm("Clear ALL carousel runs?")) return;
+    carouselRuns = [];
     try { localStorage.removeItem(CAROUSEL_STORAGE_KEY); } catch(e) {}
     $("#cr-import-box").value = "";
     renderCarouselTab();
-    showMessage("Carousel packet cleared.", "info");
+    updateMachineReadableState();
+    showMessage("All carousel runs cleared.", "info");
   });
 
-  // Manus permanent skill hero copy
+  // Manus permanent skill hero copy — uses the most recently imported run
   $("#btn-cr-copy-manus-skill").addEventListener("click", e => {
-    const text = carouselState?.manus_permanent_skill;
+    const text = carouselRuns.find(r => r.manus_permanent_skill)?.manus_permanent_skill;
     if (text) copyToClipboard(text, e.currentTarget, "Copy Manus Permanent Skill");
   });
 
-  // All carousel copy buttons (data-crkb)
+  // Carousel tab — all interactive buttons via delegation (copy, collapse, remove)
   $("#carousels-tab-content").addEventListener("click", e => {
-    const btn = e.target.closest("[data-crkb]");
-    if (!btn) return;
-    const text = crCopyReg[btn.dataset.crkb];
-    if (text !== undefined) copyToClipboard(text, btn, btn.dataset.label || btn.textContent);
+    // Copy buttons (data-crkb)
+    const crkbBtn = e.target.closest("[data-crkb]");
+    if (crkbBtn) {
+      const text = crCopyReg[crkbBtn.dataset.crkb];
+      if (text !== undefined) copyToClipboard(text, crkbBtn, crkbBtn.dataset.label || crkbBtn.textContent);
+      return;
+    }
+    // Collapse/expand run card
+    const colBtn = e.target.closest("[data-cr-collapse]");
+    if (colBtn) {
+      const card = document.querySelector(`.cr-run-card[data-crid="${colBtn.dataset.crCollapse}"]`);
+      if (card) card.classList.toggle("cr-run-collapsed");
+      return;
+    }
+    // Remove a single run
+    const remBtn = e.target.closest("[data-cr-remove]");
+    if (remBtn) {
+      if (!confirm("Remove this carousel run?")) return;
+      carouselRuns = carouselRuns.filter(r => r.id !== remBtn.dataset.crRemove);
+      saveCarousel();
+      renderCarouselTab();
+      updateMachineReadableState();
+      showMessage("Carousel run removed.", "info");
+      return;
+    }
   });
 
   // ---- Execution tab ----
@@ -2099,6 +2135,7 @@ function init() {
       exPacketState = pkt;
       saveExecution();
       renderExecutionPacketPreview(pkt, errs);
+      updateMachineReadableState();
       $("#btn-ex-copy-packet").style.display = "";
       const valid = errs.length === 0;
       showMessage(valid ? `Execution packet loaded: ${pkt.task_id}` : `Packet loaded with ${errs.length} validation issue(s).`, valid ? "success" : "warn");
@@ -2110,6 +2147,7 @@ function init() {
   $("#btn-ex-clear-packet").addEventListener("click", () => {
     exPacketState = null;
     saveExecution();
+    updateMachineReadableState();
     $("#ex-import-box").value = "";
     $("#ex-packet-preview").style.display = "none";
     $("#btn-ex-copy-packet").style.display = "none";
@@ -2134,6 +2172,7 @@ function init() {
       exAppendRunLog(result);
       saveExecution();
       renderExRunLog();
+      updateMachineReadableState();
       msgEl.className = "ex-result-message ex-result-ok";
       msgEl.textContent = "✓ Result imported — " + (result.task_id || "unknown task") + " — " + (result.status || "?");
       msgEl.style.display = "";
@@ -2159,6 +2198,9 @@ function init() {
     renderExRunLog();
     showMessage("Run log cleared.", "info");
   });
+
+  // Sync machine-readable state tags once all state is loaded
+  updateMachineReadableState();
 }
 
 
@@ -3489,8 +3531,8 @@ function renderCardOCSection(d) {
  * Import via BEGIN_SOVEREIGN_CAROUSEL_V1 … END_SOVEREIGN_CAROUSEL_V1.
  * ========================================================================= */
 
-const CAROUSEL_STORAGE_KEY = "sovereign_carousel_v1";
-let   carouselState        = null;
+const CAROUSEL_STORAGE_KEY = "sovereign_carousel_v2";
+let   carouselRuns         = [];   // array of { id, imported_at, campaign_id, manus_permanent_skill, carousel_a, carousel_b }
 let   crCopyReg            = {};
 let   crKeySeq             = 0;
 
@@ -3511,10 +3553,16 @@ function parseCarouselPacket(raw) {
 }
 
 function saveCarousel() {
-  try { localStorage.setItem(CAROUSEL_STORAGE_KEY, JSON.stringify(carouselState)); } catch(err) {}
+  try { localStorage.setItem(CAROUSEL_STORAGE_KEY, JSON.stringify(carouselRuns)); } catch(err) {}
 }
 function loadCarousel() {
-  try { const r = localStorage.getItem(CAROUSEL_STORAGE_KEY); if (r) carouselState = JSON.parse(r); } catch(err) {}
+  try {
+    const r = localStorage.getItem(CAROUSEL_STORAGE_KEY);
+    if (r) {
+      const parsed = JSON.parse(r);
+      carouselRuns = Array.isArray(parsed) ? parsed : [];
+    }
+  } catch(err) {}
 }
 
 /* ---- Carousel render helpers ---- */
@@ -3639,16 +3687,18 @@ function renderCarouselBox(c, label) {
 function renderCarouselTab() {
   const manusPanel = $("#cr-manus-skill-panel");
   const content    = $("#cr-content");
-  if (!carouselState) {
+
+  if (!carouselRuns || carouselRuns.length === 0) {
     if (manusPanel) manusPanel.style.display = "none";
     if (content)  { content.style.display = "none"; content.innerHTML = ""; }
     return;
   }
 
-  // Manus permanent skill
-  if (carouselState.manus_permanent_skill && manusPanel) {
+  // Manus permanent skill — use most recently imported run's skill
+  const latestSkill = carouselRuns.find(r => r.manus_permanent_skill)?.manus_permanent_skill;
+  if (latestSkill && manusPanel) {
     const ta = $("#cr-manus-skill-textarea");
-    if (ta) ta.value = carouselState.manus_permanent_skill;
+    if (ta) ta.value = latestSkill;
     manusPanel.style.display = "";
   }
 
@@ -3656,11 +3706,189 @@ function renderCarouselTab() {
   Object.keys(crCopyReg).forEach(k => delete crCopyReg[k]);
   crKeySeq = 0;
 
-  content.innerHTML =
-    renderCarouselBox(carouselState.carousel_a, "Carousel A") +
-    renderCarouselBox(carouselState.carousel_b, "Carousel B");
+  content.innerHTML = carouselRuns.map(run => {
+    const ts       = run.imported_at ? new Date(run.imported_at).toLocaleString() : "";
+    const campaign = run.campaign_id || "Untitled Campaign";
+    const aCount   = run.carousel_a?.slide_map?.length || 0;
+    const bCount   = run.carousel_b?.slide_map?.length || 0;
+    return `<div class="cr-run-card" data-crid="${escapeHTML(run.id)}">
+      <div class="cr-run-header">
+        <button class="cr-run-collapse-btn" data-cr-collapse="${escapeHTML(run.id)}" title="Collapse / expand">▼</button>
+        <div class="cr-run-meta">
+          <span class="cr-run-campaign">${escapeHTML(campaign)}</span>
+          <span class="cr-run-slide-count">${aCount + bCount} slides</span>
+          <span class="cr-run-ts">${escapeHTML(ts)}</span>
+        </div>
+        <button class="cr-run-remove-btn" data-cr-remove="${escapeHTML(run.id)}">× Remove</button>
+      </div>
+      <div class="cr-run-body">
+        ${renderCarouselBox(run.carousel_a, "Carousel A")}
+        ${renderCarouselBox(run.carousel_b, "Carousel B")}
+      </div>
+    </div>`;
+  }).join("");
   content.style.display = "";
 }
+
+/* =========================================================================
+ * MACHINE-READABLE STATE + SOVEREIGN DASHBOARD API
+ * Keeps the <script type="application/json"> tags in sync after every
+ * state change so Hermes (and any executor) can read the full dashboard
+ * state via document.getElementById(id).textContent without touching the UI.
+ * ========================================================================= */
+
+function updateMachineReadableState() {
+  function setTag(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = JSON.stringify(val, null, 2);
+  }
+
+  // Execution packet — the current task Hermes should run
+  setTag("execution-packet", exPacketState || {});
+
+  // Carousel runs — summary per run (full data available via carouselRuns JS var)
+  setTag("carousel-data", (carouselRuns || []).map(r => ({
+    id:              r.id,
+    imported_at:     r.imported_at,
+    campaign_id:     r.campaign_id || "",
+    carousel_a_type: r.carousel_a?.carousel_type || null,
+    carousel_a_slides: r.carousel_a?.slide_map?.length || 0,
+    carousel_b_type: r.carousel_b?.carousel_type || null,
+    carousel_b_slides: r.carousel_b?.slide_map?.length || 0,
+  })));
+
+  // Deliverables summary
+  const dels = state?.deliverables || [];
+  setTag("deliverables-data", {
+    total:       dels.length,
+    published:   dels.filter(d => d.status === "published").length,
+    unpublished: dels.filter(d => d.status !== "published").length,
+    platforms:   [...new Set(dels.map(d => d.platform).filter(Boolean))],
+  });
+
+  // Flow summary
+  setTag("flow-data", flowState ? {
+    loaded:     true,
+    campaign_id: flowState.campaign_id || null,
+    video_title: flowState.video_title || null,
+    batch_count: (flowState.batches || []).length,
+  } : { loaded: false });
+
+  // Dashboard manifest — everything Hermes needs to orient itself
+  setTag("dashboard-manifest", {
+    schema_version: "SOVEREIGN_DASHBOARD_MANIFEST_V1",
+    updated_at: new Date().toISOString(),
+    tabs: {
+      execution: {
+        packet_loaded:   !!exPacketState,
+        task_id:         exPacketState?.task_id         || null,
+        approval_status: exPacketState?.approval_status || null,
+        run_mode:        exPacketState?.run_mode        || null,
+        executor:        exPacketState?.executor        || null,
+        platform:        exPacketState?.platform        || null,
+      },
+      carousels: {
+        run_count: (carouselRuns || []).length,
+        campaigns: (carouselRuns || []).map(r => r.campaign_id).filter(Boolean),
+      },
+      deliverables: {
+        total:     dels.length,
+        published: dels.filter(d => d.status === "published").length,
+      },
+      flow: { loaded: !!flowState },
+    },
+    hermes_interface: {
+      note: "Hermes has two interaction paths: JS API (preferred) or UI selectors (fallback).",
+      js_api: "window.SovereignDashboard",
+      read_tags: {
+        manifest:          "document.getElementById('dashboard-manifest').textContent",
+        execution_packet:  "document.getElementById('execution-packet').textContent",
+        carousel_data:     "document.getElementById('carousel-data').textContent",
+        deliverables_data: "document.getElementById('deliverables-data').textContent",
+        flow_data:         "document.getElementById('flow-data').textContent",
+      },
+      ui_selectors: {
+        execution_packet:  { textarea: "#ex-import-box",   button: "#btn-ex-import" },
+        execution_result:  { textarea: "#ex-result-box",   button: "#btn-ex-result-import" },
+        carousel:          { textarea: "#cr-import-box",   button: "#btn-cr-import" },
+        deliverables:      { textarea: "#import-box",      button: "#btn-import" },
+        flow:              { textarea: "#fl-import-box",   button: "#btn-fl-import" },
+      },
+    },
+  });
+}
+
+/* ---- SovereignDashboard JS API — preferred Hermes interface ---- */
+window.SovereignDashboard = {
+  version: "1.0",
+
+  /* Read the full manifest */
+  getManifest() {
+    try { return JSON.parse(document.getElementById("dashboard-manifest").textContent); } catch(e) { return null; }
+  },
+
+  /* Import an execution packet (replaces current) */
+  importExecutionPacket(text) {
+    try {
+      const pkt  = exParsePacket(text);
+      const errs = exValidatePacket(pkt);
+      exPacketState = pkt;
+      saveExecution();
+      renderExecutionPacketPreview(pkt, errs);
+      updateMachineReadableState();
+      return { ok: true, task_id: pkt.task_id, warnings: errs };
+    } catch(err) { return { ok: false, error: err.message }; }
+  },
+
+  /* Import a carousel packet (appends a new run) */
+  importCarouselPacket(text) {
+    try {
+      const pkt = parseCarouselPacket(text);
+      const run = {
+        id: "cr_run_" + Date.now(),
+        imported_at: new Date().toISOString(),
+        campaign_id: pkt.campaign_id || "",
+        manus_permanent_skill: pkt.manus_permanent_skill || "",
+        carousel_a: pkt.carousel_a || null,
+        carousel_b: pkt.carousel_b || null,
+      };
+      carouselRuns.unshift(run);
+      saveCarousel();
+      renderCarouselTab();
+      updateMachineReadableState();
+      return { ok: true, run_id: run.id, campaign_id: run.campaign_id };
+    } catch(err) { return { ok: false, error: err.message }; }
+  },
+
+  /* Import an execution result (appends to run log) */
+  importExecutionResult(text) {
+    try {
+      const result = exParseResult(text);
+      exAppendRunLog(result);
+      saveExecution();
+      renderExRunLog();
+      updateMachineReadableState();
+      return { ok: true, task_id: result.task_id, status: result.status };
+    } catch(err) { return { ok: false, error: err.message }; }
+  },
+
+  /* Clear the current execution packet */
+  clearExecutionPacket() {
+    exPacketState = null;
+    saveExecution();
+    updateMachineReadableState();
+    return { ok: true };
+  },
+
+  /* Clear all carousel runs */
+  clearAllCarousels() {
+    carouselRuns = [];
+    saveCarousel();
+    renderCarouselTab();
+    updateMachineReadableState();
+    return { ok: true };
+  },
+};
 
 /* Expose for external callers (future direct-injection path) */
 window.SovereignOpenClaw = {
