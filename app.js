@@ -90,8 +90,8 @@ Website (use these for all web pages):
 * Solutions Hub | Blog
 * Industries Hub | Pillar
 * Industries Hub | Application
-* Products Hub | Pillar
-* Products Hub | Product Page
+* Manufacturers Hub | Pillar
+* Manufacturers Hub | Product Page
 
 Social / Video:
 * YouTube / NotebookLM Video
@@ -2201,6 +2201,8 @@ function init() {
 
   // Sync machine-readable state tags once all state is loaded
   updateMachineReadableState();
+  // Attention bar needs a second pass after all tab content is wired
+  renderAttentionBar();
 }
 
 
@@ -4288,7 +4290,17 @@ function renderExecutionPacketPreview(pkt, errs = []) {
     hsPanel.style.display = "none";
   }
 
-  /* Hermes prompt */
+  /* Prompt panel — label and button text reflect active executor */
+  const isManual = exSelectedExecutor === "manual";
+  const promptPanel = $("#ex-hermes-prompt-display")?.closest(".panel");
+  if (promptPanel) {
+    const lbl = promptPanel.querySelector(".panel-label");
+    const copyBtn = document.getElementById("btn-ex-copy-hermes-prompt");
+    if (lbl) lbl.textContent = isManual
+      ? "Manual Handoff Checklist — follow these steps yourself"
+      : "Hermes Prompt — paste this to start execution";
+    if (copyBtn) copyBtn.textContent = isManual ? "Copy Checklist" : "Copy Hermes Prompt";
+  }
   $("#ex-hermes-prompt-display").textContent = exBuildHermesPrompt(pkt);
 
   preview.style.display = "";
