@@ -17,8 +17,8 @@ const CONFIG = {
     "Solutions Hub | Blog",
     "Industries Hub | Pillar",
     "Industries Hub | Application",
-    "Products Hub | Pillar",
-    "Products Hub | Product Page",
+    "Manufacturers Hub | Pillar",
+    "Manufacturers Hub | Product Page",
     "Webpage",
     "Product Page",
     "Blog",
@@ -175,8 +175,8 @@ const PLATFORM_ABBREV = {
   "Solutions Hub | Blog":         "Sol Blog",
   "Industries Hub | Pillar":      "Ind Pillar",
   "Industries Hub | Application": "Ind App",
-  "Products Hub | Pillar":        "Prod Pillar",
-  "Products Hub | Product Page":  "Prod Page",
+  "Manufacturers Hub | Pillar":        "Prod Pillar",
+  "Manufacturers Hub | Product Page":  "Prod Page",
   "Webpage":                      "Webpage",
   "Product Page":                 "Product Pg",
   "Blog":                         "Blog",
@@ -213,8 +213,8 @@ const WEBSITE_HUB_CONFIG = [
   },
   {
     name: "Products Hub",
-    pillarPlatforms: new Set(["Products Hub | Pillar"]),
-    platforms: new Set(["Products Hub | Pillar", "Products Hub | Product Page", "Product Page"])
+    pillarPlatforms: new Set(["Manufacturers Hub | Pillar"]),
+    platforms: new Set(["Manufacturers Hub | Pillar", "Manufacturers Hub | Product Page", "Product Page"])
   }
 ];
 
@@ -3034,8 +3034,8 @@ const OC_PLATFORM_ACCOUNT_MAP = {
   "Solutions Hub | Blog":         "squarespace_libertyces_site",
   "Industries Hub | Pillar":      "squarespace_libertyces_site",
   "Industries Hub | Application": "squarespace_libertyces_site",
-  "Products Hub | Pillar":        "squarespace_libertyces_site",
-  "Products Hub | Product Page":  "squarespace_libertyces_site",
+  "Manufacturers Hub | Pillar":        "squarespace_libertyces_site",
+  "Manufacturers Hub | Product Page":  "squarespace_libertyces_site",
   "Webpage":                      "squarespace_libertyces_site",
   "Product Page":                 "squarespace_libertyces_site",
   "Blog":                         "squarespace_libertyces_site"
@@ -3054,8 +3054,8 @@ const OC_PLATFORM_ACTION_MAP = {
   "Solutions Hub | Blog":         "publish_squarespace_html",
   "Industries Hub | Pillar":      "publish_squarespace_html",
   "Industries Hub | Application": "publish_squarespace_html",
-  "Products Hub | Pillar":        "publish_squarespace_html",
-  "Products Hub | Product Page":  "publish_squarespace_html",
+  "Manufacturers Hub | Pillar":        "publish_squarespace_html",
+  "Manufacturers Hub | Product Page":  "publish_squarespace_html",
   "Webpage":                      "publish_squarespace_html",
   "Product Page":                 "publish_squarespace_html",
   "Blog":                         "publish_squarespace_html"
@@ -3074,8 +3074,8 @@ const OC_CTA_PLACEMENT_MAP = {
   "Solutions Hub | Blog":         "HERO_MIDPAGE_FOOTER",
   "Industries Hub | Pillar":      "HERO_MIDPAGE_FOOTER",
   "Industries Hub | Application": "HERO_MIDPAGE_FOOTER",
-  "Products Hub | Pillar":        "HERO_MIDPAGE_FOOTER",
-  "Products Hub | Product Page":  "HERO_MIDPAGE_FOOTER",
+  "Manufacturers Hub | Pillar":        "HERO_MIDPAGE_FOOTER",
+  "Manufacturers Hub | Product Page":  "HERO_MIDPAGE_FOOTER",
   "Webpage":                      "HERO_MIDPAGE_FOOTER",
   "Product Page":                 "HERO_MIDPAGE_FOOTER",
   "Blog":                         "HERO_MIDPAGE_FOOTER"
