@@ -279,6 +279,18 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
         </div>
       </section>
 
+      <!-- Session Approval Console -->
+      <section class="panel ex-session-approval-panel">
+        <div class="ex-session-header">
+          <span class="panel-label">Session Approval</span>
+          <button id="btn-ex-gen-rb009" class="btn btn-ghost">Generate RB009 Focus Test</button>
+        </div>
+        <p class="ex-import-desc">Approve an account once per session. All packets for that account are cleared. Resets on page reload. Policy: <code>SESSION_ACCOUNT</code>.</p>
+        <div id="ex-session-approvals" class="ex-session-approvals">
+          <div class="ex-session-empty">No accounts seen yet — load a packet or paste a result to populate.</div>
+        </div>
+      </section>
+
       <!-- Packet import -->
       <section class="panel ex-import-panel">
         <span class="panel-label">Paste Execution Packet</span>
@@ -326,6 +338,30 @@ END_SOVEREIGN_DELIVERABLES_V1</pre>
         <div id="ex-hard-stops-panel" class="panel ex-hard-stops-panel" style="display:none;">
           <span class="panel-label ex-hard-stops-label">Hard Stops</span>
           <ol id="ex-hard-stops-list" class="ex-hard-stops-list"></ol>
+        </div>
+
+        <!-- Preconditions -->
+        <div id="ex-preconditions-panel" class="panel ex-section-panel" style="display:none;">
+          <span class="panel-label">Preconditions</span>
+          <ol id="ex-preconditions-list" class="ex-preconditions-list"></ol>
+        </div>
+
+        <!-- Identity Target -->
+        <div id="ex-identity-target-panel" class="panel ex-section-panel" style="display:none;">
+          <span class="panel-label">Identity Target</span>
+          <div id="ex-identity-target-display" class="ex-routing-grid"></div>
+        </div>
+
+        <!-- Composer Target -->
+        <div id="ex-composer-target-panel" class="panel ex-section-panel" style="display:none;">
+          <span class="panel-label">Composer Target</span>
+          <div id="ex-composer-target-display" class="ex-routing-grid"></div>
+        </div>
+
+        <!-- Action Mask -->
+        <div id="ex-action-mask-panel" class="panel ex-section-panel" style="display:none;">
+          <span class="panel-label">Action Mask</span>
+          <div id="ex-action-mask-display" class="ex-action-mask-display"></div>
         </div>
 
         <!-- Hermes prompt block -->

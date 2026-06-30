@@ -2135,6 +2135,7 @@ function init() {
       exPacketState = pkt;
       saveExecution();
       renderExecutionPacketPreview(pkt, errs);
+      renderSessionApprovalConsole();
       updateMachineReadableState();
       $("#btn-ex-copy-packet").style.display = "";
       const valid = errs.length === 0;
@@ -2151,7 +2152,49 @@ function init() {
     $("#ex-import-box").value = "";
     $("#ex-packet-preview").style.display = "none";
     $("#btn-ex-copy-packet").style.display = "none";
+    renderSessionApprovalConsole();
     showMessage("Execution packet cleared.", "info");
+  });
+
+  // RB009 — Composer Textbox Focus Stability Test
+  $("#btn-ex-gen-rb009")?.addEventListener("click", () => {
+    const pkt = generateRB009();
+    exPacketState = pkt;
+    saveExecution();
+    renderExecutionPacketPreview(pkt, exValidatePacket(pkt));
+    renderSessionApprovalConsole();
+    updateMachineReadableState();
+    $("#btn-ex-copy-packet").style.display = "";
+    showMessage("RB009 loaded. Approve the session for linkedin_james_personal, then copy the Hermes prompt.", "success");
+  });
+
+  // Session approval button delegation
+  $("#ex-session-approvals")?.addEventListener("click", e => {
+    const btn = e.target.closest(".ex-session-btn");
+    if (!btn) return;
+    const key    = btn.dataset.acct;
+    const action = btn.dataset.action;
+    if (action === "approve") {
+      exSessionApprovals[key] = { approved: true, approved_at: new Date().toISOString() };
+      if (exPacketState?.account_key === key) {
+        exPacketState.approval_status = "BENJAMIN_APPROVED";
+        saveExecution();
+        renderExecutionPacketPreview(exPacketState, exValidatePacket(exPacketState));
+        updateMachineReadableState();
+      }
+      showMessage(`Session approved — ${key}. All packets for this account are cleared this session.`, "success");
+    } else {
+      delete exSessionApprovals[key];
+      if (exPacketState?.account_key === key) {
+        exPacketState.approval_status = "PENDING";
+        saveExecution();
+        renderExecutionPacketPreview(exPacketState, exValidatePacket(exPacketState));
+        updateMachineReadableState();
+      }
+      showMessage(`Session approval revoked — ${key}.`, "info");
+    }
+    renderSessionApprovalConsole();
+    renderAttentionBar();
   });
 
   $("#btn-ex-copy-packet").addEventListener("click", e => {
@@ -3799,6 +3842,23 @@ function renderAttentionBar() {
       </div>`);
   }
 
+  // ── Pending session approval for loaded packet ────────────────────────────
+  if (exPacketState?.account_key && exPacketState.approval_policy === "SESSION_ACCOUNT") {
+    const key  = exPacketState.account_key;
+    const appr = exSessionApprovals[key];
+    if (!appr?.approved) {
+      items.push(`
+        <div class="gab-item gab-approval">
+          <span class="gab-dot gab-dot-approval"></span>
+          <div class="gab-text">
+            <span class="gab-label">Session approval needed: ${escapeHTML(key)}</span>
+            <span class="gab-detail">Approve once this session to clear all packets for this account</span>
+          </div>
+          <button class="btn btn-sm gab-action" data-gab-goto="execution">Approve</button>
+        </div>`);
+    }
+  }
+
   if (items.length === 0) {
     bar.style.display = "none";
     bar.innerHTML = "";
@@ -4146,6 +4206,64 @@ const EX_RUN_MODES = {
   LIVE_EXECUTION_APPROVED: { label: "LIVE EXECUTION — AUTHORIZED",  cls: "ex-rm-live",     desc: "Full execution. Requires BENJAMIN_APPROVED + live_execution_explicit_flag: true." },
 };
 
+/* ---- RB009 — Composer Textbox Focus Stability Test ---- */
+function generateRB009() {
+  return {
+    schema:                     "SOVEREIGN_EXECUTION_PACKET_V1",
+    runbook_id:                 "RB009_COMPOSER_TEXTBOX_FOCUS_STABILITY",
+    task_id:                    `RB009_${Date.now()}`,
+    campaign_id:                "SYSTEM_TEST",
+    platform:                   "LinkedIn James Post",
+    action_type:                "composer_focus_stability_test",
+    account_key:                "linkedin_james_personal",
+    browser_profile:            "linkedin-james",
+    start_page:                 "https://www.linkedin.com/feed/",
+    destination_url:            "https://www.linkedin.com/feed/",
+    approval_status:            "PENDING",
+    approval_policy:            "SESSION_ACCOUNT",
+    run_mode:                   "NAVIGATION_DRY_RUN",
+    executor:                   "hermes",
+    live_execution_explicit_flag: false,
+    action_mask: {
+      allow:    ["navigate", "click", "screenshot", "read_dom", "verify_focus"],
+      disallow: ["paste", "type", "post", "schedule", "upload", "comment", "send", "delete"]
+    },
+    identity_target: {
+      expected_account_name:           "James Riggins",
+      expected_profile_behavior:       "LinkedIn feed loads showing James Riggins identity in top nav",
+      expected_verification_indicator: "Profile name or avatar visible in LinkedIn top navigation bar"
+    },
+    composer_target: {
+      control_text:             "Start a post",
+      start_page:               "https://www.linkedin.com/feed/",
+      textbox_hint:             "What do you want to talk about?",
+      focus_verification_method:"document.activeElement must be inside .ql-editor or [role=textbox] after click",
+      allowed_actions:          ["click", "verify_focus", "screenshot", "read_dom"],
+      disallowed_actions:       ["paste", "type"]
+    },
+    preconditions: [
+      "Browser profile 'linkedin-james' is running with CDP attached to localhost:9222",
+      "James Riggins is logged in — not on an authwall or CAPTCHA",
+      "LinkedIn feed home (linkedin.com/feed/) is accessible"
+    ],
+    hard_stop: [
+      "DO NOT paste or type any content into the composer",
+      "DO NOT click Post, Submit, Share, or Send",
+      "DO NOT upload any media or files",
+      "DO NOT schedule anything",
+      "If James Riggins identity cannot be verified, report BLOCKED immediately",
+      "If focus cannot be verified deterministically, report focus_result: UNRELIABLE with DOM evidence",
+      "Return focus_result field in result packet: DETERMINISTIC | UNRELIABLE | BLOCKED"
+    ],
+    result_import_mode: "PASTE",
+    post_packet:        null,
+    post_body_source:   null,
+    cta_placement:      null,
+    media_source:       null,
+    schedule_time:      null
+  };
+}
+
 /* ---- Hermes prompt builder / Manual checklist ---- */
 function exBuildHermesPrompt(pkt) {
   if (exSelectedExecutor === "manual") return buildManualHandoffChecklist(pkt);
@@ -4163,7 +4281,23 @@ function exBuildHermesPrompt(pkt) {
   } else if (rm === "DRY_RUN_READINESS_ONLY") {
     actionBlock = `Connect to the browser profile: ${profile}.\nNavigate to: ${url}\nRead the page state. Report what you see.\nDo NOT interact with page content. Do NOT click anything except navigation.\nIf you see an authwall or login wall, report BLOCKED and stop.\nReturn a complete BEGIN_EXECUTION_RESULT_V1 packet.`;
   } else if (rm === "NAVIGATION_DRY_RUN") {
-    actionBlock = `Connect to the browser profile: ${profile}.\nNavigate to: ${url}\nLocate the target element for this action type: ${pkt.action_type || ""}.\nDo NOT click, type, or interact with it.\nReport what you found and where it is on the page.\nReturn a complete BEGIN_EXECUTION_RESULT_V1 packet.`;
+    const sp = pkt.start_page || url;
+    const it = pkt.identity_target || {};
+    const ct = pkt.composer_target || {};
+    const am = pkt.action_mask || {};
+    const allowList  = (am.allow    || []).join(", ") || "—";
+    const blockList  = (am.disallow || []).join(", ") || "—";
+    let navBlock = `Connect to browser profile: ${profile}.\nNavigate to start_page: ${sp}\n`;
+    if (it.expected_account_name) {
+      navBlock += `\nVerify identity:\n  Expected account: ${it.expected_account_name}\n  Verification indicator: ${it.expected_verification_indicator || "visible in nav"}\n  Profile behavior: ${it.expected_profile_behavior || "normal"}\nIf identity cannot be verified, report BLOCKED immediately — do not proceed.\n`;
+    }
+    if (ct.control_text) {
+      navBlock += `\nComposer focus test:\n  Locate control: "${ct.control_text}"\n  Click to open the composer.\n  Locate textbox: "${ct.textbox_hint || "post textbox"}"\n  Attempt focus.\n  Verify focus using: ${ct.focus_verification_method || "DOM activeElement check"}\n  Report focus_result: DETERMINISTIC | UNRELIABLE | BLOCKED\n  Capture DOM evidence in notes field of result packet.\n  DO NOT type, paste, or submit anything.\n`;
+    } else {
+      navBlock += `\nLocate target element for action type: ${pkt.action_type || ""}\nDo NOT click, type, or interact with it.\nReport what you found and where it is on the page.\n`;
+    }
+    navBlock += `\nAction mask — obey strictly:\n  Allowed:    ${allowList}\n  Disallowed: ${blockList}`;
+    actionBlock = navBlock;
   } else if (rm === "COMPOSER_DRY_RUN") {
     const body = pkt.post_body_source ? `\n\nPost body to type verbatim:\n---\n${pkt.post_body_source}\n---` : "";
     actionBlock = `Connect to the browser profile: ${profile}.\nNavigate to: ${url}\nOpen the post composer.\nType the following content VERBATIM — do not alter a single character:${body}\n\nDO NOT click Post, Submit, Share, or Send.\nTake a screenshot of the composer with the typed text visible.\nClose the composer WITHOUT submitting.\nReturn a BEGIN_EXECUTION_RESULT_V1 packet confirming what you typed and that nothing was posted.`;
@@ -4197,11 +4331,35 @@ function exAppendRunLog(result) {
   if (exRunLog.length > 200) exRunLog = exRunLog.slice(0, 200);
 }
 
+/* ---- Session Approval Console ---- */
+function renderSessionApprovalConsole() {
+  const container = $("#ex-session-approvals");
+  if (!container) return;
+  const accounts = new Set();
+  if (exPacketState?.account_key) accounts.add(exPacketState.account_key);
+  exRunLog.slice(0, 20).forEach(r => { if (r.account_key) accounts.add(r.account_key); });
+  if (accounts.size === 0) {
+    container.innerHTML = `<div class="ex-session-empty">No accounts seen yet — load a packet or paste a result to populate.</div>`;
+    return;
+  }
+  container.innerHTML = [...accounts].map(key => {
+    const appr = exSessionApprovals[key];
+    const approved = appr?.approved;
+    const ts = approved ? new Date(appr.approved_at).toLocaleTimeString() : null;
+    return `<div class="ex-session-acct ${approved ? "ex-session-acct-approved" : "ex-session-acct-pending"}">
+      <span class="ex-session-acct-key">${escapeHTML(key)}</span>
+      <span class="ex-session-acct-status">${approved ? `✅ Approved ${escapeHTML(ts)}` : "⏸ Pending"}</span>
+      <button class="btn btn-sm ex-session-btn" data-acct="${escapeHTML(key)}" data-action="${approved ? "revoke" : "approve"}">
+        ${approved ? "Revoke" : "Approve Session"}
+      </button>
+    </div>`;
+  }).join("");
+}
+
 /* ---- Render ---- */
 function renderExecutionTab() {
-  // Sync executor selector UI
   $all(".ex-exec-btn").forEach(b => b.classList.toggle("ex-exec-active", b.dataset.executor === exSelectedExecutor));
-  // Restore packet preview if one is loaded
+  renderSessionApprovalConsole();
   if (exPacketState) {
     const errs = exValidatePacket(exPacketState);
     renderExecutionPacketPreview(exPacketState, errs);
@@ -4249,17 +4407,20 @@ function renderExecutionPacketPreview(pkt, errs = []) {
 
   /* Routing grid */
   const routingFields = [
-    ["Task ID",       pkt.task_id,          "mono"],
-    ["Campaign",      pkt.campaign_id,       ""],
-    ["Platform",      pkt.platform,          "badge"],
-    ["Action",        pkt.action_type,       "mono"],
-    ["Executor",      pkt.executor || exSelectedExecutor, "badge-exec"],
-    ["Account Key",   pkt.account_key,       "mono"],
-    ["Browser Profile",pkt.browser_profile,  "mono"],
-    ["Destination",   pkt.destination_url,   "mono"],
-    ["CTA Placement", pkt.cta_placement || "—", ""],
-    ["Media Source",  pkt.media_source  || "—", ""],
-    ["Schedule",      pkt.schedule_time || "Immediate", ""],
+    ["Runbook",        pkt.runbook_id     || "—", "mono"],
+    ["Approval Policy",pkt.approval_policy|| "—", ""],
+    ["Task ID",        pkt.task_id,          "mono"],
+    ["Campaign",       pkt.campaign_id,       ""],
+    ["Platform",       pkt.platform,          "badge"],
+    ["Action",         pkt.action_type,       "mono"],
+    ["Executor",       pkt.executor || exSelectedExecutor, "badge-exec"],
+    ["Account Key",    pkt.account_key,       "mono"],
+    ["Browser Profile",pkt.browser_profile,   "mono"],
+    ["Start Page",     pkt.start_page     || "—", "mono"],
+    ["Destination",    pkt.destination_url,   "mono"],
+    ["CTA Placement",  pkt.cta_placement  || "—", ""],
+    ["Media Source",   pkt.media_source   || "—", ""],
+    ["Schedule",       pkt.schedule_time  || "Immediate", ""],
   ];
   $("#ex-routing-grid").innerHTML = routingFields.map(([label, val, cls]) => {
     let valHTML = escapeHTML(String(val || "—"));
@@ -4290,6 +4451,66 @@ function renderExecutionPacketPreview(pkt, errs = []) {
     hsPanel.style.display = "";
   } else {
     hsPanel.style.display = "none";
+  }
+
+  /* Preconditions */
+  const prePanel = $("#ex-preconditions-panel");
+  if (prePanel) {
+    const preList = $("#ex-preconditions-list");
+    if (Array.isArray(pkt.preconditions) && pkt.preconditions.length > 0) {
+      preList.innerHTML = pkt.preconditions.map(p => `<li>${escapeHTML(p)}</li>`).join("");
+      prePanel.style.display = "";
+    } else { prePanel.style.display = "none"; }
+  }
+
+  /* Identity Target */
+  const idPanel = $("#ex-identity-target-panel");
+  if (idPanel) {
+    const idDisplay = $("#ex-identity-target-display");
+    if (pkt.identity_target && typeof pkt.identity_target === "object") {
+      const it = pkt.identity_target;
+      idDisplay.innerHTML = [
+        ["Expected Account",       it.expected_account_name],
+        ["Profile Behavior",       it.expected_profile_behavior],
+        ["Verification Indicator", it.expected_verification_indicator],
+      ].filter(([,v]) => v).map(([l,v]) =>
+        `<div class="ex-field-label">${escapeHTML(l)}</div><div class="ex-field-value">${escapeHTML(v)}</div>`
+      ).join("");
+      idPanel.style.display = "";
+    } else { idPanel.style.display = "none"; }
+  }
+
+  /* Composer Target */
+  const ctPanel = $("#ex-composer-target-panel");
+  if (ctPanel) {
+    const ctDisplay = $("#ex-composer-target-display");
+    if (pkt.composer_target && typeof pkt.composer_target === "object") {
+      const ct = pkt.composer_target;
+      ctDisplay.innerHTML = [
+        ["Control Text",       ct.control_text],
+        ["Start Page",         ct.start_page],
+        ["Textbox Hint",       ct.textbox_hint],
+        ["Focus Verification", ct.focus_verification_method],
+      ].filter(([,v]) => v).map(([l,v]) =>
+        `<div class="ex-field-label">${escapeHTML(l)}</div><div class="ex-field-value ex-mono">${escapeHTML(v)}</div>`
+      ).join("");
+      ctPanel.style.display = "";
+    } else { ctPanel.style.display = "none"; }
+  }
+
+  /* Action Mask */
+  const amPanel = $("#ex-action-mask-panel");
+  if (amPanel) {
+    const amDisplay = $("#ex-action-mask-display");
+    if (pkt.action_mask && typeof pkt.action_mask === "object") {
+      const am = pkt.action_mask;
+      const allowTags   = (am.allow    || []).map(a => `<span class="ex-mask-allow">${escapeHTML(a)}</span>`).join(" ");
+      const disallowTags= (am.disallow || []).map(a => `<span class="ex-mask-disallow">${escapeHTML(a)}</span>`).join(" ");
+      amDisplay.innerHTML = `
+        <div class="ex-mask-row"><span class="ex-mask-label">Allowed</span><span class="ex-mask-tags">${allowTags || "—"}</span></div>
+        <div class="ex-mask-row"><span class="ex-mask-label">Disallowed</span><span class="ex-mask-tags">${disallowTags || "—"}</span></div>`;
+      amPanel.style.display = "";
+    } else { amPanel.style.display = "none"; }
   }
 
   /* Prompt panel — label and button text reflect active executor */
