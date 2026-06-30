@@ -4066,6 +4066,7 @@ const EXEC_STORAGE_KEY = "sovereign_execution_v1";
 let exPacketState    = null;
 let exRunLog         = [];
 let exSelectedExecutor = "hermes";
+let exSessionApprovals = {}; // account_key → { approved: bool, approved_at: ISO } — in-memory only, resets on reload
 
 /* ---- Storage ---- */
 function saveExecution() {
@@ -4116,7 +4117,8 @@ function exParseResult(raw) {
 const EX_REQUIRED_FIELDS = [
   "schema","task_id","campaign_id","platform","action_type",
   "account_key","browser_profile","destination_url",
-  "approval_status","run_mode","executor","hard_stop","result_import_mode"
+  "approval_status","run_mode","executor","hard_stop","result_import_mode",
+  "runbook_id","start_page","action_mask","approval_policy"
 ];
 
 function exValidatePacket(pkt) {
