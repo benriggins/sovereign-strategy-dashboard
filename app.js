@@ -3679,3 +3679,273 @@ window.SovereignOpenClaw = {
 };
 
 document.addEventListener("DOMContentLoaded", init);
+
+/* =========================================================================
+ * SOVEREIGN EXECUTION LAYER — v1
+ * Executor-agnostic task runner. Hermes is primary. OpenClaw is legacy.
+ * Reads SOVEREIGN_EXECUTION_PACKET_V1. Imports BEGIN_EXECUTION_RESULT_V1.
+ * Benjamin is the only approval authority. No live posting without gate.
+ * ========================================================================= */
+
+const EXEC_STORAGE_KEY = "sovereign_execution_v1";
+
+let exPacketState    = null;
+let exRunLog         = [];
+let exSelectedExecutor = "hermes";
+
+/* ---- Storage ---- */
+function saveExecution() {
+  try {
+    localStorage.setItem(EXEC_STORAGE_KEY, JSON.stringify({
+      packet: exPacketState,
+      runLog: exRunLog,
+      executor: exSelectedExecutor
+    }));
+  } catch(e) {}
+}
+function loadExecution() {
+  try {
+    const raw = localStorage.getItem(EXEC_STORAGE_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    exPacketState      = s.packet   || null;
+    exRunLog           = s.runLog   || [];
+    exSelectedExecutor = s.executor || "hermes";
+  } catch(e) {}
+}
+
+/* ---- Parse ---- */
+function exParsePacket(raw) {
+  const OPEN  = "BEGIN_SOVEREIGN_EXECUTION_PACKET_V1";
+  const CLOSE = "END_SOVEREIGN_EXECUTION_PACKET_V1";
+  let text = raw.trim();
+  const s = text.indexOf(OPEN);
+  const e = text.indexOf(CLOSE);
+  if (s !== -1 && e !== -1) text = text.slice(s + OPEN.length, e).trim();
+  return JSON.parse(text);
+}
+
+function exParseResult(raw) {
+  const OPEN  = "BEGIN_EXECUTION_RESULT_V1";
+  const CLOSE = "END_EXECUTION_RESULT_V1";
+  let text = raw.trim();
+  const s = text.indexOf(OPEN);
+  const e = text.indexOf(CLOSE);
+  if (s !== -1 && e !== -1) text = text.slice(s + OPEN.length, e).trim();
+  const result = JSON.parse(text);
+  if (!result.task_id) throw new Error("Missing task_id in result packet.");
+  if (!result.status)  throw new Error("Missing status in result packet.");
+  return result;
+}
+
+/* ---- Validate ---- */
+const EX_REQUIRED_FIELDS = [
+  "schema","task_id","campaign_id","platform","action_type",
+  "account_key","browser_profile","destination_url",
+  "approval_status","run_mode","executor","hard_stop","result_import_mode"
+];
+
+function exValidatePacket(pkt) {
+  const errs = [];
+  EX_REQUIRED_FIELDS.forEach(f => {
+    if (pkt[f] === undefined || pkt[f] === null || pkt[f] === "") {
+      errs.push(`Missing required field: ${f}`);
+    }
+  });
+  if (pkt.schema && pkt.schema !== "SOVEREIGN_EXECUTION_PACKET_V1") {
+    errs.push(`schema must be SOVEREIGN_EXECUTION_PACKET_V1, got: ${pkt.schema}`);
+  }
+  if (pkt.hard_stop && !Array.isArray(pkt.hard_stop)) {
+    errs.push("hard_stop must be an array.");
+  }
+  return errs;
+}
+
+/* ---- Run modes ---- */
+const EX_RUN_MODES = {
+  READ_ONLY_PACKET_TEST:   { label: "READ ONLY — Packet Test",      cls: "ex-rm-read",     desc: "Validate packet only. No browser. No navigation." },
+  DRY_RUN_READINESS_ONLY:  { label: "DRY RUN — Readiness Only",     cls: "ex-rm-dry",      desc: "Navigate to destination. Read page state. Do NOT interact." },
+  NAVIGATION_DRY_RUN:      { label: "DRY RUN — Navigation",         cls: "ex-rm-nav",      desc: "Navigate and locate target element. Do NOT type or submit." },
+  COMPOSER_DRY_RUN:        { label: "DRY RUN — Composer",           cls: "ex-rm-composer", desc: "Open composer. Type content verbatim. Do NOT click Submit or Post." },
+  LIVE_EXECUTION_APPROVED: { label: "LIVE EXECUTION — AUTHORIZED",  cls: "ex-rm-live",     desc: "Full execution. Requires BENJAMIN_APPROVED + live_execution_explicit_flag: true." },
+};
+
+/* ---- Hermes prompt builder ---- */
+function exBuildHermesPrompt(pkt) {
+  const rm = pkt.run_mode || "DRY_RUN_READINESS_ONLY";
+  const url = pkt.destination_url || "[destination_url]";
+  const profile = pkt.browser_profile || "[browser_profile]";
+  const tid = pkt.task_id || "[task_id]";
+
+  const packetBlock = `Execution packet (task_id: ${tid}):\n${JSON.stringify(pkt, null, 2)}`;
+
+  let actionBlock = "";
+  if (rm === "READ_ONLY_PACKET_TEST") {
+    actionBlock = `Read and validate the execution packet above.\nConfirm all required fields are present.\nDo NOT open a browser. Do NOT navigate anywhere.\nReturn a BEGIN_EXECUTION_RESULT_V1 packet with your validation findings.`;
+  } else if (rm === "DRY_RUN_READINESS_ONLY") {
+    actionBlock = `Connect to the browser profile: ${profile}.\nNavigate to: ${url}\nRead the page state. Report what you see.\nDo NOT interact with page content. Do NOT click anything except navigation.\nIf you see an authwall or login wall, report BLOCKED and stop.\nReturn a complete BEGIN_EXECUTION_RESULT_V1 packet.`;
+  } else if (rm === "NAVIGATION_DRY_RUN") {
+    actionBlock = `Connect to the browser profile: ${profile}.\nNavigate to: ${url}\nLocate the target element for this action type: ${pkt.action_type || ""}.\nDo NOT click, type, or interact with it.\nReport what you found and where it is on the page.\nReturn a complete BEGIN_EXECUTION_RESULT_V1 packet.`;
+  } else if (rm === "COMPOSER_DRY_RUN") {
+    const body = pkt.post_body_source ? `\n\nPost body to type verbatim:\n---\n${pkt.post_body_source}\n---` : "";
+    actionBlock = `Connect to the browser profile: ${profile}.\nNavigate to: ${url}\nOpen the post composer.\nType the following content VERBATIM — do not alter a single character:${body}\n\nDO NOT click Post, Submit, Share, or Send.\nTake a screenshot of the composer with the typed text visible.\nClose the composer WITHOUT submitting.\nReturn a BEGIN_EXECUTION_RESULT_V1 packet confirming what you typed and that nothing was posted.`;
+  } else if (rm === "LIVE_EXECUTION_APPROVED") {
+    actionBlock = `⚠ LIVE EXECUTION AUTHORIZED.\nConnect to the browser profile: ${profile}.\nRead the full execution packet. Obey all hard_stop rules.\nExecute the action: ${pkt.action_type || ""}.\nNavigate to: ${url}\nPost content verbatim from post_body_source. Do not alter any text.\nAfter posting, complete CTA placement per cta_placement: ${pkt.cta_placement || "none"}.\nReturn a BEGIN_EXECUTION_RESULT_V1 packet with the live post URL.`;
+  }
+
+  const hardStopBlock = Array.isArray(pkt.hard_stop)
+    ? "\n\nHard stops — obey all:\n" + pkt.hard_stop.map((s, i) => `${i + 1}. ${s}`).join("\n")
+    : "";
+
+  return `You are the Sovereign Strategy Execution Agent.\n\n${packetBlock}\n\n${actionBlock}${hardStopBlock}\n\nReturn a complete BEGIN_EXECUTION_RESULT_V1 packet when done.`;
+}
+
+/* ---- Run log ---- */
+function exAppendRunLog(result) {
+  exRunLog.unshift({
+    timestamp:         new Date().toISOString(),
+    executor:          result.executor    || "unknown",
+    task_id:           result.task_id     || "unknown",
+    campaign_id:       result.campaign_id || "",
+    platform:          result.platform    || "",
+    account_key:       result.account_key || "",
+    run_mode:          result.run_mode    || "",
+    status:            result.status      || "unknown",
+    actions_completed: result.actions_completed || [],
+    blocking_reason:   result.blocking_reason   || "",
+    result_urls:       result.result_urls        || [],
+    notes:             result.notes              || "",
+  });
+  if (exRunLog.length > 200) exRunLog = exRunLog.slice(0, 200);
+}
+
+/* ---- Render ---- */
+function renderExecutionTab() {
+  // Sync executor selector UI
+  $all(".ex-exec-btn").forEach(b => b.classList.toggle("ex-exec-active", b.dataset.executor === exSelectedExecutor));
+  // Restore packet preview if one is loaded
+  if (exPacketState) {
+    const errs = exValidatePacket(exPacketState);
+    renderExecutionPacketPreview(exPacketState, errs);
+    $("#btn-ex-copy-packet").style.display = "";
+  }
+  renderExRunLog();
+}
+
+function renderExecutionPacketPreview(pkt, errs = []) {
+  const preview = $("#ex-packet-preview");
+  if (!preview) return;
+
+  const approved = pkt.approval_status === "BENJAMIN_APPROVED";
+  const liveMode = pkt.run_mode === "LIVE_EXECUTION_APPROVED";
+  const liveFlag = pkt.live_execution_explicit_flag === true;
+  const liveOk   = liveMode && liveFlag && approved;
+
+  /* Approval gate */
+  const gate = $("#ex-approval-gate");
+  const gateIcon  = $("#ex-gate-icon");
+  const gateTitle = $("#ex-gate-title");
+  const gateDesc  = $("#ex-gate-desc");
+  if (approved) {
+    gate.className = "ex-gate ex-gate-approved";
+    gateIcon.textContent = "✅";
+    gateTitle.textContent = "BENJAMIN_APPROVED";
+    gateDesc.textContent = liveMode
+      ? (liveFlag ? "Live execution is authorized. All hard stops still apply."
+                  : "⚠ LIVE mode but live_execution_explicit_flag is not true — posting is BLOCKED.")
+      : "Execution authorized within the limits of the selected run mode.";
+  } else {
+    gate.className = "ex-gate ex-gate-blocked";
+    gateIcon.textContent = "🚫";
+    gateTitle.textContent = "NOT APPROVED — Execution Blocked";
+    gateDesc.textContent = `approval_status is "${pkt.approval_status || "missing"}". Must be BENJAMIN_APPROVED. No executor may proceed.`;
+  }
+
+  /* Run mode */
+  const rmKey  = pkt.run_mode || "";
+  const rmInfo = EX_RUN_MODES[rmKey] || { label: rmKey || "Unknown", cls: "ex-rm-read", desc: "Unknown run mode." };
+  const rmBox  = $("#ex-run-mode-box");
+  rmBox.className = `ex-run-mode-box ${rmInfo.cls}`;
+  $("#ex-run-mode-badge").textContent = rmInfo.label;
+  $("#ex-run-mode-desc").textContent  = rmInfo.desc;
+
+  /* Routing grid */
+  const routingFields = [
+    ["Task ID",       pkt.task_id,          "mono"],
+    ["Campaign",      pkt.campaign_id,       ""],
+    ["Platform",      pkt.platform,          "badge"],
+    ["Action",        pkt.action_type,       "mono"],
+    ["Executor",      pkt.executor || exSelectedExecutor, "badge-exec"],
+    ["Account Key",   pkt.account_key,       "mono"],
+    ["Browser Profile",pkt.browser_profile,  "mono"],
+    ["Destination",   pkt.destination_url,   "mono"],
+    ["CTA Placement", pkt.cta_placement || "—", ""],
+    ["Media Source",  pkt.media_source  || "—", ""],
+    ["Schedule",      pkt.schedule_time || "Immediate", ""],
+  ];
+  $("#ex-routing-grid").innerHTML = routingFields.map(([label, val, cls]) => {
+    let valHTML = escapeHTML(String(val || "—"));
+    if (cls === "mono")      valHTML = `<span class="ex-mono">${escapeHTML(String(val || "—"))}</span>`;
+    if (cls === "badge")     valHTML = `<span class="ex-platform-badge">${escapeHTML(String(val || "—"))}</span>`;
+    if (cls === "badge-exec") valHTML = `<span class="ex-executor-badge ex-exec-badge-${escapeHTML(String(val || ""))}">${escapeHTML(String(val || "—"))}</span>`;
+    return `<div class="ex-field-label">${escapeHTML(label)}</div><div class="ex-field-value">${valHTML}</div>`;
+  }).join("");
+
+  /* Validation list */
+  const allFieldsOk = errs.length === 0;
+  $("#ex-validation-list").innerHTML = EX_REQUIRED_FIELDS.map(f => {
+    const present = pkt[f] !== undefined && pkt[f] !== null && pkt[f] !== "";
+    return `<div class="ex-val-row">
+      <span class="ex-val-icon">${present ? "✅" : "❌"}</span>
+      <span class="ex-val-label">${escapeHTML(f)}</span>
+      <span class="ex-val-value">${present ? escapeHTML(String(Array.isArray(pkt[f]) ? `[${pkt[f].length} items]` : pkt[f]).slice(0, 60)) : "MISSING"}</span>
+    </div>`;
+  }).join("") + (errs.length > 0
+    ? `<div class="ex-val-errors">${errs.map(e => `<div class="ex-val-err">⚠ ${escapeHTML(e)}</div>`).join("")}</div>`
+    : `<div class="ex-val-ok">All required fields present.</div>`);
+
+  /* Hard stops */
+  const hsPanel = $("#ex-hard-stops-panel");
+  const hsList  = $("#ex-hard-stops-list");
+  if (Array.isArray(pkt.hard_stop) && pkt.hard_stop.length > 0) {
+    hsList.innerHTML = pkt.hard_stop.map(s => `<li>${escapeHTML(s)}</li>`).join("");
+    hsPanel.style.display = "";
+  } else {
+    hsPanel.style.display = "none";
+  }
+
+  /* Hermes prompt */
+  $("#ex-hermes-prompt-display").textContent = exBuildHermesPrompt(pkt);
+
+  preview.style.display = "";
+}
+
+function renderExRunLog() {
+  const el = $("#ex-run-log");
+  if (!el) return;
+  if (exRunLog.length === 0) {
+    el.innerHTML = `<div class="ex-empty">No runs yet. Import a result packet to populate the log.</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="oc-table-wrap"><table class="ex-log-table">
+    <thead><tr>
+      <th>Time</th><th>Executor</th><th>Task ID</th><th>Platform</th><th>Mode</th><th>Status</th><th>Notes</th>
+    </tr></thead>
+    <tbody>${exRunLog.map(r => {
+      const statusCls = r.status === "success" ? "ex-status-ok"
+        : r.status === "blocked" ? "ex-status-blocked"
+        : r.status === "failed"  ? "ex-status-failed"
+        : "ex-status-dry";
+      const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : "—";
+      return `<tr>
+        <td class="ex-log-ts">${escapeHTML(ts)}</td>
+        <td><span class="ex-executor-badge ex-exec-badge-${escapeHTML(r.executor)}">${escapeHTML(r.executor)}</span></td>
+        <td class="ex-mono ex-log-tid">${escapeHTML(r.task_id)}</td>
+        <td>${escapeHTML(r.platform)}</td>
+        <td class="ex-mono">${escapeHTML(r.run_mode)}</td>
+        <td><span class="${statusCls}">${escapeHTML(r.status)}</span></td>
+        <td class="ex-log-notes">${escapeHTML(r.blocking_reason || r.notes || "—")}</td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table></div>`;
+}

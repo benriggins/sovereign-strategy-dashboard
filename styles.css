@@ -2306,3 +2306,146 @@ html, body {
   .cr-carousel-box { padding: 14px; }
   .cr-slide-card-header { gap: 6px; }
 }
+
+/* =========================================================================
+ * EXECUTION TAB — styles
+ * ========================================================================= */
+
+/* Header panel */
+.ex-header-panel {}
+.ex-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.ex-header-left { flex: 1; min-width: 200px; }
+.ex-header-desc { font-size: 0.78rem; color: var(--muted); margin: 4px 0 0; line-height: 1.5; }
+.ex-header-desc code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 3px; font-size: 0.75rem; }
+
+/* Executor selector */
+.ex-executor-selector { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.ex-executor-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+.ex-executor-btns { display: flex; gap: 4px; }
+.ex-exec-btn {
+  padding: 5px 12px; font-size: 0.7rem; font-weight: 600;
+  border: 1px solid var(--border); border-radius: 20px;
+  background: transparent; color: var(--muted);
+  cursor: pointer; transition: all 0.15s;
+}
+.ex-exec-btn:hover { border-color: var(--accent); color: var(--text); }
+.ex-exec-active { background: var(--accent); border-color: var(--accent); color: #fff !important; }
+
+/* Import */
+.ex-import-panel {}
+.ex-import-desc { font-size: 0.78rem; color: var(--muted); margin: 4px 0 12px; line-height: 1.5; }
+.ex-import-desc code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 3px; font-size: 0.75rem; }
+.ex-import-box { min-height: 100px; }
+
+/* Approval gate */
+.ex-gate {
+  display: flex; align-items: center; gap: 14px;
+  border-radius: 10px; padding: 14px 18px; margin-bottom: 16px;
+  border: 1.5px solid transparent;
+}
+.ex-gate-approved { border-color: rgba(56,200,100,0.4); background: rgba(56,200,100,0.06); }
+.ex-gate-blocked  { border-color: rgba(220,50,50,0.4);  background: rgba(220,50,50,0.06); }
+.ex-gate-unknown  { border-color: rgba(140,140,140,0.3); background: rgba(140,140,140,0.04); }
+.ex-gate-icon { font-size: 1.5rem; flex-shrink: 0; }
+.ex-gate-title { font-size: 0.88rem; font-weight: 700; }
+.ex-gate-approved .ex-gate-title { color: #56d364; }
+.ex-gate-blocked  .ex-gate-title { color: #f85149; }
+.ex-gate-desc { font-size: 0.73rem; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+
+/* Run mode */
+.ex-run-mode-box {
+  border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  border: 1px solid transparent;
+}
+.ex-rm-read     { background: rgba(140,140,140,0.08); border-color: rgba(140,140,140,0.2); }
+.ex-rm-dry      { background: rgba(21,101,192,0.1);   border-color: rgba(21,101,192,0.25); }
+.ex-rm-nav      { background: rgba(130,80,220,0.1);   border-color: rgba(130,80,220,0.25); }
+.ex-rm-composer { background: rgba(210,140,0,0.1);    border-color: rgba(210,140,0,0.25); }
+.ex-rm-live     { background: rgba(220,50,50,0.1);    border-color: rgba(220,50,50,0.3); }
+.ex-run-mode-badge { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; color: var(--text); }
+.ex-rm-live .ex-run-mode-badge { color: #f85149; }
+.ex-rm-dry  .ex-run-mode-badge { color: #90caf9; }
+.ex-rm-nav  .ex-run-mode-badge { color: #c084fc; }
+.ex-rm-composer .ex-run-mode-badge { color: #f0a500; }
+.ex-run-mode-desc { font-size: 0.72rem; color: var(--muted); }
+
+/* Routing grid */
+.ex-routing-panel {}
+.ex-routing-grid { display: grid; grid-template-columns: 140px 1fr; row-gap: 8px; column-gap: 14px; }
+.ex-field-label { font-size: 0.67rem; font-weight: 600; color: var(--muted); align-self: center; }
+.ex-field-value { font-size: 0.78rem; color: var(--text); word-break: break-all; align-self: center; }
+.ex-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.7rem; color: #90caf9; }
+.ex-platform-badge {
+  font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+  background: rgba(21,101,192,0.18); color: #90caf9; border: 1px solid rgba(21,101,192,0.3);
+  text-transform: capitalize;
+}
+.ex-executor-badge {
+  font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+  border: 1px solid transparent;
+}
+.ex-exec-badge-hermes   { background: rgba(56,200,100,0.14); color: #56d364; border-color: rgba(56,200,100,0.3); }
+.ex-exec-badge-openclaw { background: rgba(130,80,220,0.14); color: #c084fc; border-color: rgba(130,80,220,0.3); }
+.ex-exec-badge-manual   { background: rgba(140,140,140,0.14); color: var(--muted); border-color: rgba(140,140,140,0.2); }
+
+/* Validation */
+.ex-validation-panel {}
+.ex-validation-list { display: flex; flex-direction: column; gap: 5px; }
+.ex-val-row { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; }
+.ex-val-icon { font-size: 0.8rem; width: 20px; flex-shrink: 0; }
+.ex-val-label { color: var(--muted); flex-shrink: 0; min-width: 160px; }
+.ex-val-value { font-family: monospace; font-size: 0.67rem; color: #78909c; margin-left: auto; text-align: right; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-val-errors { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.ex-val-err { font-size: 0.72rem; color: #f0a500; padding: 3px 8px; background: rgba(210,140,0,0.08); border-radius: 4px; }
+.ex-val-ok  { font-size: 0.72rem; color: #56d364; margin-top: 8px; }
+
+/* Hard stops */
+.ex-hard-stops-panel { border-left: 3px solid rgba(220,50,50,0.5); background: rgba(220,50,50,0.05); }
+.ex-hard-stops-label { color: #f85149 !important; }
+.ex-hard-stops-list { padding-left: 18px; display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+.ex-hard-stops-list li { font-size: 0.74rem; color: #ef9a9a; line-height: 1.4; }
+
+/* Hermes prompt block */
+.ex-prompt-panel { border-left: 3px solid rgba(56,200,100,0.4); background: rgba(56,200,100,0.04); }
+.ex-prompt-actions { margin-bottom: 10px; }
+.ex-hermes-prompt-display {
+  background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px; padding: 12px 14px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.7rem; color: #90caf9;
+  line-height: 1.65; white-space: pre-wrap; word-break: break-word;
+  max-height: 320px; overflow-y: auto;
+}
+
+/* Result panel */
+.ex-result-panel {}
+.ex-result-message {
+  margin-top: 10px; padding: 8px 12px; border-radius: 6px;
+  font-size: 0.75rem; font-weight: 600;
+}
+.ex-result-ok  { background: rgba(56,200,100,0.12); color: #56d364; border: 1px solid rgba(56,200,100,0.25); }
+.ex-result-err { background: rgba(220,50,50,0.12);  color: #f85149; border: 1px solid rgba(220,50,50,0.25); }
+
+/* Run log */
+.ex-runlog-panel {}
+.ex-runlog-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.ex-empty { font-size: 0.78rem; color: var(--muted); padding: 12px 0; }
+.ex-log-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+.ex-log-table th { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.ex-log-table td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text); vertical-align: top; }
+.ex-log-table tr:last-child td { border-bottom: none; }
+.ex-log-ts { font-family: monospace; font-size: 0.65rem; color: var(--muted); white-space: nowrap; }
+.ex-log-tid { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-log-notes { max-width: 220px; color: var(--muted); font-size: 0.68rem; }
+.ex-status-ok      { color: #56d364; font-weight: 600; }
+.ex-status-blocked { color: #f0a500; font-weight: 600; }
+.ex-status-failed  { color: #f85149; font-weight: 600; }
+.ex-status-dry     { color: #90caf9; font-weight: 600; }
+
+@media (max-width: 580px) {
+  .ex-header-row { flex-direction: column; }
+  .ex-executor-selector { align-items: flex-start; }
+  .ex-routing-grid { grid-template-columns: 110px 1fr; }
+  .ex-val-label { min-width: 120px; }
+}
