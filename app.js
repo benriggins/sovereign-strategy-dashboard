@@ -4275,6 +4275,46 @@ function exBuildHermesPrompt(pkt) {
 
   const packetBlock = `Execution packet (task_id: ${tid}):\n${JSON.stringify(pkt, null, 2)}`;
 
+  // ── API execution path (LinkedIn post.py, etc.) ──────────────────────────
+  const API_ACTION_TYPES = new Set(["publish_linkedin_post","publish_linkedin_newsletter","publish_linkedin_carousel"]);
+  const ACCOUNT_FLAG = { "linkedin_james_personal": "james", "linkedin_libertyces_company_via_james": "liberty" };
+  const isApiAction = pkt.execution_method === "api" || API_ACTION_TYPES.has(pkt.action_type);
+
+  if (isApiAction) {
+    const acctFlag = ACCOUNT_FLAG[pkt.account_key] || null;
+    const caption  = pkt.post_body_source || pkt.post_packet?.body || "[MISSING — post_body_source required]";
+    const comment  = pkt.post_packet?.first_comment || null;
+    const altText  = pkt.post_packet?.alt_text || null;
+    const media    = pkt.media_source || null;
+    const scheduleTime = pkt.post_packet?.scheduled_time || pkt.schedule_time || null;
+
+    if (rm === "READ_ONLY_PACKET_TEST") {
+      return `You are the Sovereign Strategy Execution Agent.\n\n${packetBlock}\n\nRead and validate the execution packet above.\nThis is an API-based action (post.py). Confirm all required fields are present including post_body_source / post_packet.body.\nDo NOT run any commands.\nReturn a BEGIN_EXECUTION_RESULT_V1 packet with your validation findings.`;
+    }
+
+    if (rm === "DRY_RUN_READINESS_ONLY") {
+      return `You are the Sovereign Strategy Execution Agent.\n\n${packetBlock}\n\nAPI CREDENTIAL CHECK — do not post anything.\n\nRun this via Bash:\n\`\`\`python\nimport json, os, requests\ncreds = json.load(open(os.path.expanduser("~/.claude/libertyces-linkedin/credentials.json")))\nr = requests.get("https://api.linkedin.com/v2/userinfo", headers={"Authorization": f"Bearer {creds['access_token']}"})\nprint(r.status_code, r.text[:300])\n\`\`\`\n\nIf 200: report token valid + confirm account name in response.\nIf 401: report BLOCKED — token expired. Tell Benjamin to run setup_oauth.py.\nDo NOT post anything.\nReturn a BEGIN_EXECUTION_RESULT_V1 packet with your findings.`;
+    }
+
+    if (rm === "LIVE_EXECUTION_APPROVED") {
+      if (!acctFlag) {
+        return `You are the Sovereign Strategy Execution Agent.\n\nBLOCKED — account_key "${pkt.account_key}" does not map to a known --account flag for post.py.\nKnown mappings: linkedin_james_personal → james, linkedin_libertyces_company_via_james → liberty.\nDo not proceed. Return BEGIN_EXECUTION_RESULT_V1 with status: blocked.`;
+      }
+      if (pkt.account_key === "linkedin_libertyces_company_via_james") {
+        return `You are the Sovereign Strategy Execution Agent.\n\nBLOCKED — --account liberty is not yet ready. org_urn is not configured in credentials.json. Do not proceed.\nTell Benjamin: LibertyCES company page posting requires running setup_oauth.py again to capture the org_urn.\nReturn BEGIN_EXECUTION_RESULT_V1 with status: blocked.`;
+      }
+      const commentLine = comment && !scheduleTime
+        ? `\n  "--comment", """${comment}""",` : "";
+      const scheduleLine = scheduleTime ? `\n  "--schedule", "${scheduleTime}",` : "";
+      const imageLine  = media    ? `\n  "--image",    "${media}",`    : "";
+      const altLine    = altText  ? `\n  "--alt-text", "${altText}",`  : "";
+      return `You are the Sovereign Strategy Execution Agent.\n\n${packetBlock}\n\n⚠ LIVE EXECUTION — LINKEDIN API POST\nVerify before running: approval_status = BENJAMIN_APPROVED ✓, run_mode = LIVE_EXECUTION_APPROVED ✓, live_execution_explicit_flag = true\n\nPost body (verbatim — do not change one character):\n---\n${caption}\n---\n${comment ? `\nFirst comment (verbatim):\n---\n${comment}\n---` : ""}\n\nRun this via Bash:\n\`\`\`python\nimport subprocess, sys\nresult = subprocess.run([\n  "python3", "/Users/benjaminriggins/.claude/libertyces-linkedin/post.py",\n  "--account", "${acctFlag}",\n  "--caption", """${caption}""",${imageLine}${altLine}${scheduleLine}${commentLine}\n], capture_output=True, text=True)\nprint(result.stdout)\nif result.returncode != 0:\n    print("ERROR:", result.stderr, file=sys.stderr)\n\`\`\`\n\nAfter successful run: report the Post ID from stdout.\nReturn a complete BEGIN_EXECUTION_RESULT_V1 packet with result_urls containing the post ID/URN.\nIf any error occurs, report BLOCKED with the exact stderr output.`;
+    }
+
+    return `You are the Sovereign Strategy Execution Agent.\n\n${packetBlock}\n\nThis is an API action (post.py). Run mode is ${rm}.\nFor API actions, only DRY_RUN_READINESS_ONLY (credential check) and LIVE_EXECUTION_APPROVED (post) are supported.\nReturn BEGIN_EXECUTION_RESULT_V1 confirming you read the packet.`;
+  }
+
+  // ── Browser/CDP execution path ────────────────────────────────────────────
   let actionBlock = "";
   if (rm === "READ_ONLY_PACKET_TEST") {
     actionBlock = `Read and validate the execution packet above.\nConfirm all required fields are present.\nDo NOT open a browser. Do NOT navigate anywhere.\nReturn a BEGIN_EXECUTION_RESULT_V1 packet with your validation findings.`;
